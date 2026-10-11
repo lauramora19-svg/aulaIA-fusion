@@ -478,9 +478,11 @@ function Generator({ onSaved, contexto }) {
     try {
       const res=await fetch("/api/generar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({comunidad,modo,etapa,curso,area,duracion,tema,necesidades,numAlumnos,objetivos,tipoResultado:tipo,comentario,idioma,metodologias,promptOverride:prompt,...(await extraEquipo())})});
       if(!res.ok)throw new Error();
-      await procesarStream(res, (texto) => {
+      const textoAccion = await procesarStream(res, (texto) => {
         setAcciones(prev=>{const idx=prev.findIndex(a=>a.tipo===tipo);if(idx<0)return prev;const u=[...prev];u[idx]={...u[idx],texto};return u;});
       });
+      // Se guarda sola en Mis documentos, para no perderla al salir
+      try { const { data: { user } } = await supabase.auth.getUser(); if (user && textoAccion) await supabase.from("programaciones").insert({ user_id: user.id, titulo: `${meta.label} — ${area} ${curso}${ctxAlumno ? ` — ${ctxAlumno.nombre}` : ""}`.slice(0, 200), modo, tipo_resultado: tipo, comunidad, etapa, curso, area, duracion, necesidades, num_alumnos: numAlumnos, objetivos, comentario, contenido: textoAccion, compartido: false, ...(ctxClase ? { clase_id: ctxClase.id } : {}), ...(ctxAlumno ? { alumno_id: ctxAlumno.id } : {}) }); } catch {}
     } catch(e){
       setAcciones(prev=>{const idx=prev.findIndex(a=>a.tipo===tipo);if(idx<0)return prev;const u=[...prev];u[idx]={...u[idx],texto:"❌ Error al generar."};return u;});
     } finally{setAccionGenerando("");}
@@ -772,7 +774,7 @@ export default function App() {
           {view==="alumno"    &&<AlumnoPage key={params.alumnoId} alumnoId={params.alumnoId} claseId={params.claseId} clases={clases} onVolverClase={id=>ir("clase",{claseId:id})} onNuevoDocumento={nuevoDocumento} onAbrirDoc={abrirDoc}/>}
           {view==="library"   &&<div className="container"><LibraryPage onOpen={abrirDoc} onNew={()=>nuevoDocumento()}/></div>}
           {view==="generator" &&<Generator key={genKey} contexto={contexto} onSaved={()=>ir("library")}/>}
-          {view==="doc"       &&<div className="container"><DocPage docId={docId} onBack={volverDeDoc}/></div>}
+          {view==="doc"       &&<div className="container"><DocPage key={docId} docId={docId} onBack={volverDeDoc} onAbrirDoc={abrirDoc}/></div>}
           {agendaUsada && <AgendaEmbed visible={view==="ag"} seccion={params.seccion} onVista={(v)=>{ setView("ag"); setParams({ seccion: v }); }} onAbrirDoc={abrirDoc}/>}
         </main>
       </div>
