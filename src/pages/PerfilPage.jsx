@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { miPerfil, guardarPerfil } from "../lib/equipo";
+import { miPerfil, guardarPerfil, miUsoMes } from "../lib/equipo";
 import { COMUNIDADES } from "../lib/datos";
 import Campo from "../components/Campo";
 
@@ -10,7 +10,8 @@ export default function PerfilPage() {
   const [guardando, setGuardando] = useState(false);
   const [ok, setOk] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { miPerfil().then(setP).catch(e => setError(e.message)); }, []);
+  const [uso, setUso] = useState(null);
+  useEffect(() => { miPerfil().then(setP).catch(e => setError(e.message)); miUsoMes().then(setUso).catch(() => {}); }, []);
   if (!p) return <div className="crm-page"><p className="crm-loading">Cargando…</p></div>;
   const set = (k) => (e) => { setOk(false); setP({ ...p, [k]: e.target.value }); };
   const guardar = async (e) => {
@@ -22,6 +23,19 @@ export default function PerfilPage() {
     <div className="crm-page">
       <h1 className="crm-hello-title">Mi perfil docente</h1>
       <p className="crm-muted">Se rellena una vez. Los especialistas del equipo son iguales para todas las cuentas; estos datos (y tus grupos) son los que hacen que trabajen para ti. Solo los ve tu cuenta.{p.rol === "admin" ? " · Tu cuenta es la administradora." : ""}</p>
+      {uso && (
+        <div className="card" style={{ maxWidth: 560, marginBottom: 16 }}>
+          <p className="crm-card-title">Tu uso de la IA este mes</p>
+          {uso.limite < 0 ? <p className="crm-muted">{uso.usados} generaciones · sin límite</p> : (
+            <>
+              <p className="crm-muted">{uso.usados} de {uso.limite} generaciones · se renueva el día 1</p>
+              <div style={{ height: 8, borderRadius: 99, background: "var(--border-soft)", overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, (uso.usados / Math.max(1, uso.limite)) * 100)}%`, height: "100%", background: uso.usados >= uso.limite ? "#dc2626" : "var(--orange)" }} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <form className="crm-form" onSubmit={guardar} style={{ maxWidth: 560 }}>
         <Campo label="Nombre" hint="Cómo te nombran los especialistas ({docente})"><input className="input-tema" value={p.nombre || ""} onChange={set("nombre")} /></Campo>
         <Campo label="Centro" hint="{centro}"><input className="input-tema" value={p.centro || ""} onChange={set("centro")} /></Campo>

@@ -17,6 +17,51 @@ export default async function handler(req) {
     especialistaId = null, grupoTexto = "",
   } = await req.json();
 
+  // ── CUENTA, LÍMITE MENSUAL Y REGISTRO DE USO ─────────────────────────────
+  // Solo pueden generar las cuentas con sesión iniciada. Cada generación se
+  // apunta en uso_ia; la administradora no tiene límite.
+  if (!supabaseUrl || !supabaseKey) return new Response(JSON.stringify({ error: "Servidor sin configurar" }), { status: 500 });
+  const hS = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" };
+  const userRes0 = accessToken ? await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` } }).catch(() => null) : null;
+  const usuarioActual = userRes0?.ok ? await userRes0.json() : null;
+  if (!usuarioActual?.id) return new Response(JSON.stringify({ error: "sesion", mensaje: "Tu sesión ha caducado. Vuelve a entrar en AulaIA." }), { status: 401, headers: { "Content-Type": "application/json" } });
+  const perfilActual = await fetch(`${supabaseUrl}/rest/v1/perfiles?id=eq.${usuarioActual.id}&select=*`, { headers: hS }).then(r => r.ok ? r.json() : []).then(a => a[0] || {}).catch(() => ({}));
+  const ajustes = await fetch(`${supabaseUrl}/rest/v1/ajustes_ia?id=eq.1&select=*`, { headers: hS }).then(r => r.ok ? r.json() : []).then(a => a[0] || {}).catch(() => ({}));
+  const esAdminActual = perfilActual.rol === "admin";
+  if (!esAdminActual && !continuarDesde) {
+    const limite = perfilActual.limite_mensual ?? ajustes.limite_por_defecto ?? 30;
+    const ahora = new Date();
+    const inicioMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1)).toISOString();
+    const cRes = await fetch(`${supabaseUrl}/rest/v1/uso_ia?user_id=eq.${usuarioActual.id}&continuacion=eq.false&created_at=gte.${encodeURIComponent(inicioMes)}&select=id&limit=1`, { headers: { ...hS, Prefer: "count=exact" } }).catch(() => null);
+    const usados = Number((cRes?.headers.get("content-range") || "").split("/")[1] || 0);
+    if (limite >= 0 && usados >= limite) {
+      return new Response(JSON.stringify({ error: "limite", usados, limite, mensaje: `Has llegado a tu límite de ${limite} generaciones de este mes. Se renueva el día 1.` }), { status: 429, headers: { "Content-Type": "application/json" } });
+    }
+  }
+  const registro = await fetch(`${supabaseUrl}/rest/v1/uso_ia`, {
+    method: "POST", headers: { ...hS, Prefer: "return=representation" },
+    body: JSON.stringify({ user_id: usuarioActual.id, tipo: String(tipoResultado || "").slice(0, 40), especialista: especialistaId || null, continuacion: !!continuarDesde }),
+  }).then(r => r.ok ? r.json() : []).then(a => a[0]?.id || null).catch(() => null);
+  // Pasa el streaming tal cual y, al terminar, apunta los tokens usados
+  const contarTokens = (cuerpo) => {
+    if (!registro || !cuerpo) return cuerpo;
+    const dec = new TextDecoder(); let buf = "", ent = 0, sal = 0;
+    return cuerpo.pipeThrough(new TransformStream({
+      transform(chunk, ctrl) {
+        ctrl.enqueue(chunk);
+        buf += dec.decode(chunk, { stream: true });
+        const lineas = buf.split("\n"); buf = lineas.pop();
+        for (const l of lineas) {
+          if (!l.startsWith("data:") || !l.includes("usage")) continue;
+          try { const d = JSON.parse(l.slice(5)); const u = d.message?.usage || d.usage; if (u?.input_tokens) ent = u.input_tokens; if (u?.output_tokens) sal = u.output_tokens; } catch {}
+        }
+      },
+      async flush() {
+        await fetch(`${supabaseUrl}/rest/v1/uso_ia?id=eq.${registro}`, { method: "PATCH", headers: hS, body: JSON.stringify({ tokens_entrada: ent, tokens_salida: sal }) }).catch(() => {});
+      },
+    }));
+  };
+
   const NECESIDADES_MAP = {
     tea:"Trastorno del Espectro Autista (TEA)", tdah:"TDAH",
     dislexia:"Dislexia", di:"Discapacidad intelectual",
@@ -245,7 +290,7 @@ INSTRUCCIONES:
       }),
     });
     if (!anthropicRes.ok) return new Response(JSON.stringify({ error:"Error API" }), { status: 502 });
-    return new Response(anthropicRes.body, {
+    return new Response(contarTokens(anthropicRes.body), {
       headers: { "Content-Type":"text/event-stream", "Cache-Control":"no-cache", "Access-Control-Allow-Origin":"*" },
     });
   }
@@ -444,14 +489,12 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
   // servidor, con el perfil de quien hace el encargo y el grupo elegido.
   // Aporta el CONTENIDO; las reglas de formato de AulaIA se mantienen debajo.
   let capaEspecialista = "", especialistaUsado = "";
-  if (supabaseUrl && supabaseKey && accessToken && !continuarDesde && (especialistaId || tipoResultado)) {
+  if (!continuarDesde && (especialistaId || tipoResultado)) {
     try {
-      const h = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
-      const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` } });
-      const usuario = userRes.ok ? await userRes.json() : null;
+      const h = hS;
+      const usuario = usuarioActual;
       if (usuario?.id) {
-        const pRes = await fetch(`${supabaseUrl}/rest/v1/perfiles?id=eq.${usuario.id}&select=*`, { headers: h });
-        const perfil = pRes.ok ? (await pRes.json())[0] || {} : {};
+        const perfil = perfilActual;
         const filtro = especialistaId ? `id=eq.${encodeURIComponent(especialistaId)}` : `tipos=cs.${encodeURIComponent("{" + tipoResultado + "}")}`;
         const alcance = perfil.rol === "admin" ? "" : "&alcance=eq.todas";
         const eRes = await fetch(`${supabaseUrl}/rest/v1/especialistas?${filtro}&activo=eq.true${alcance}&order=orden&limit=1&select=id,nombre,instrucciones`, { headers: h });
@@ -525,7 +568,7 @@ Si no puedes terminar, escribe antes de cortar:
 
   if (!anthropicRes.ok) return new Response(JSON.stringify({ error:"Error API" }), { status: 502 });
 
-  return new Response(anthropicRes.body, {
+  return new Response(contarTokens(anthropicRes.body), {
     headers: {
       "Content-Type":"text/event-stream",
       "Cache-Control":"no-cache",

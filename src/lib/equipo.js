@@ -97,3 +97,32 @@ export async function tokenActual() {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token || null;
 }
+
+// ── Uso y límites ──────────────────────────────────────────────────────────
+export async function miUsoMes() {
+  const { data } = await supabase.rpc("mi_uso_mes");
+  const r = Array.isArray(data) ? data[0] : data;
+  return r ? { usados: r.usados ?? 0, limite: r.limite ?? 30 } : null;
+}
+export async function adminUsuarios() {
+  const { data, error } = await supabase.rpc("admin_usuarios");
+  if (error) throw error;
+  return data || [];
+}
+export async function adminPonerLimite(userId, limite) {
+  const { error } = await supabase.rpc("admin_poner_limite", { p_user: userId, p_limite: limite });
+  if (error) throw error;
+}
+export async function leerAjustes() {
+  const { data } = await supabase.from("ajustes_ia").select("*").eq("id", 1).maybeSingle();
+  return data || { id: 1, limite_por_defecto: 30, precio_entrada_millon: 0, precio_salida_millon: 0 };
+}
+export async function guardarAjustes(a) {
+  const { error } = await supabase.from("ajustes_ia").update({
+    limite_por_defecto: Number(a.limite_por_defecto) || 0,
+    precio_entrada_millon: Number(a.precio_entrada_millon) || 0,
+    precio_salida_millon: Number(a.precio_salida_millon) || 0,
+    updated_at: new Date().toISOString(),
+  }).eq("id", 1);
+  if (error) throw error;
+}

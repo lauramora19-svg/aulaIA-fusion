@@ -8,6 +8,9 @@ import Navbar from "./components/Navbar";
 import AgendaEmbed from "./components/AgendaEmbed";
 import EquipoPage from "./pages/EquipoPage";
 import PerfilPage from "./pages/PerfilPage";
+import AdminPage from "./pages/AdminPage";
+import Modal from "./components/Modal";
+import { miPerfil } from "./lib/equipo";
 import Sidebar from "./components/Sidebar";
 import ClaseModal from "./components/ClaseModal";
 import HomePage from "./pages/HomePage";
@@ -699,6 +702,13 @@ export default function App() {
 
   const [agendaModal, setAgendaModal] = useState(false);
   const [agendaUsada, setAgendaUsada] = useState(false); // la Agenda se carga la primera vez que se abre
+  const [esAdmin, setEsAdmin] = useState(false);
+  const [avisoLimite, setAvisoLimite] = useState(null);
+  useEffect(() => {
+    const f = (e) => setAvisoLimite(e.detail || {});
+    window.addEventListener("aulaia-limite", f);
+    return () => window.removeEventListener("aulaia-limite", f);
+  }, []);
   const cargarClases = useCallback(async () => {
     setCargandoClases(true);
     let { data, error } = await supabase.from("clases").select("*, grupos(nombre)").order("created_at");
@@ -713,6 +723,7 @@ export default function App() {
     if (!session) return;
     cargarClases();
     iniciarAgenda();
+    miPerfil().then(p => setEsAdmin(p?.rol === "admin")).catch(() => {});
     // Enlace directo a un documento (?doc=...), p. ej. desde la Agenda docente
     const docParam = new URLSearchParams(window.location.search).get("doc");
     if (docParam) { setDocId(docParam); setView("doc"); window.history.replaceState({}, "", window.location.pathname); }
@@ -745,7 +756,7 @@ export default function App() {
       <Navbar session={session} view={view} onGoLibrary={()=>ir("library")} onGoNew={()=>nuevoDocumento()}/>
       <div className="crm-layout">
         <Sidebar
-          view={view} seccion={params.seccion} clases={clases} claseActivaId={params.claseId} onNuevo={()=>nuevoDocumento()}
+          view={view} seccion={params.seccion} clases={clases} claseActivaId={params.claseId} onNuevo={()=>nuevoDocumento()} esAdmin={esAdmin}
           abierta={menuMovil} onCerrar={()=>setMenuMovil(false)}
           onGo={(v, p)=>ir(v, p)} onNuevaClase={()=>setClaseModal(true)} onConectarAgenda={()=>setAgendaModal(true)}
         />
@@ -756,6 +767,7 @@ export default function App() {
           {view==="modelos"   &&<ModelosPage/>}
           {view==="equipo"    &&<EquipoPage clases={clases} onAbrirDoc={abrirDoc}/>}
           {view==="perfil"    &&<PerfilPage/>}
+          {view==="admin" && esAdmin &&<AdminPage/>}
           {view==="clase"     &&<ClasePage key={params.claseId} claseId={params.claseId} clases={clases} onClasesChanged={async (nuevaId)=>{ await cargarClases(); if (typeof nuevaId === "string") ir("clase",{claseId:nuevaId}); }} onNuevoDocumento={nuevoDocumento} onAbrirAlumno={(id, cid)=>ir("alumno",{alumnoId:id, claseId:cid})} onAbrirDoc={abrirDoc} onEliminada={()=>{cargarClases();ir("inicio");}}/>}
           {view==="alumno"    &&<AlumnoPage key={params.alumnoId} alumnoId={params.alumnoId} claseId={params.claseId} clases={clases} onVolverClase={id=>ir("clase",{claseId:id})} onNuevoDocumento={nuevoDocumento} onAbrirDoc={abrirDoc}/>}
           {view==="library"   &&<div className="container"><LibraryPage onOpen={abrirDoc} onNew={()=>nuevoDocumento()}/></div>}
@@ -764,6 +776,15 @@ export default function App() {
           {agendaUsada && <AgendaEmbed visible={view==="ag"} seccion={params.seccion} onVista={(v)=>{ setView("ag"); setParams({ seccion: v }); }} onAbrirDoc={abrirDoc}/>}
         </main>
       </div>
+      {avisoLimite && (
+        <Modal titulo={avisoLimite.status === 401 ? "Sesión caducada" : "Has llegado a tu límite del mes"} onClose={() => setAvisoLimite(null)}>
+          <div className="crm-form">
+            <p>{avisoLimite.mensaje || (avisoLimite.status === 401 ? "Vuelve a entrar en AulaIA." : "Has usado todas las generaciones de este mes.")}</p>
+            {avisoLimite.status !== 401 && <p className="crm-muted">Puedes seguir usando el horario, tus clases, tus documentos y todo lo demás. Si necesitas más generaciones, habla con la administradora.</p>}
+            <div className="crm-modal-actions"><span style={{ flex: 1 }} /><button className="library-new-btn" onClick={() => setAvisoLimite(null)}>Entendido</button></div>
+          </div>
+        </Modal>
+      )}
       {agendaModal && <AgendaConexionModal onClose={()=>setAgendaModal(false)}/>}
       {claseModal && <ClaseModal onClose={()=>setClaseModal(false)} onSaved={(c)=>{setClaseModal(false);cargarClases();if(c?.id)ir("clase",{claseId:c.id});}}/>}
     </div>
