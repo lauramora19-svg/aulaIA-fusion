@@ -3,8 +3,9 @@ import { supabase } from "../lib/supabase";
 import { exportarWordContenido } from "../lib/word";
 import { renderResultado } from "../lib/render";
 import ProgramarModal from "../components/ProgramarModal";
+import { AccionesSiguientes } from "../lib/acciones";
 
-export default function DocPage({ docId, onBack, isShared = false }) {
+export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false }) {
   const [doc, setDoc]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied]  = useState(false);
@@ -86,6 +87,8 @@ export default function DocPage({ docId, onBack, isShared = false }) {
       <div className="resultado-body" style={{ maxHeight:"none" }}>
         {renderResultado(doc.contenido || "")}
       </div>
+
+      {!isShared && <AccionesSiguientes doc={doc} onAbrirDoc={onAbrirDoc} />}
     </div>
   );
 }
