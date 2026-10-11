@@ -612,6 +612,22 @@
           </div>
         </div>
 
+        <!-- Versión fusionada: escribirlo con Carmen (IA) o a mano -->
+        <div id="carmen-box" style="border: 1px solid #ddd6fe; background: #f5f3ff; border-radius: var(--radius-md); padding: 0.85rem; margin-bottom: 1rem;">
+          <div style="font-weight: 700; font-size: 0.88rem; color: #6d28d9; margin-bottom: 0.4rem;">✨ Pedírselo a Carmen (IA) <span style="font-weight: 500; color: var(--text-secondary);">· o escríbelo tú abajo</span></div>
+          <textarea id="carmen-pedido" class="form-textarea" rows="2" placeholder="¿Qué quieres comunicar? Ej.: recordar la salida al museo del jueves; traer almuerzo y 3 €"></textarea>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <select id="carmen-tono" class="form-input" style="max-width: 220px;">
+              <option value="cálido y cercano">Tono cercano</option>
+              <option value="formal e institucional">Tono formal</option>
+              <option value="muy breve, para WhatsApp">Breve (WhatsApp)</option>
+              <option value="delicado y empático, para un tema sensible">Tema delicado</option>
+            </select>
+            <button type="button" id="carmen-btn" class="btn btn-primary" style="background: #7c3aed; border-color: #7c3aed;" onclick="window.templatesEngine.generarConCarmen()">✨ Generar con Carmen</button>
+            <span id="carmen-estado" style="font-size: 0.8rem; color: var(--text-muted);"></span>
+          </div>
+        </div>
+
         <div class="form-group">
           <label class="form-label">Texto del mensaje</label>
           <textarea id="edit-template-text" class="form-textarea" rows="10" placeholder="Estimada familia de {nombre_alumno}:&#10;&#10;..."></textarea>
