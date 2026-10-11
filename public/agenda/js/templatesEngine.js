@@ -89,7 +89,59 @@ class TemplatesEngine {
     document.getElementById('edit-template-category').value = tpl ? (tpl.category || '') : '';
     document.getElementById('edit-template-title').value = tpl ? tpl.title : '';
     document.getElementById('edit-template-text').value = tpl ? tpl.text : '';
+    const ped = document.getElementById('carmen-pedido'); if (ped) ped.value = '';
+    const est = document.getElementById('carmen-estado'); if (est) est.textContent = '';
     window.app.openModal('modal-template');
+  }
+
+  // ✨ Versión fusionada: Carmen (especialista en familias) redacta el comunicado
+  async generarConCarmen() {
+    const pedido = (document.getElementById('carmen-pedido')?.value || '').trim();
+    const tono = document.getElementById('carmen-tono')?.value || 'cálido y cercano';
+    const estado = document.getElementById('carmen-estado');
+    const btn = document.getElementById('carmen-btn');
+    const area = document.getElementById('edit-template-text');
+    const titulo = document.getElementById('edit-template-title');
+    const categoria = document.getElementById('edit-template-category');
+    const generar = (() => { try { return window.parent !== window && window.parent.__aulaiaGenerar; } catch (e) { return null; } })();
+    if (!pedido) { window.app.showToast('Escribe qué quieres comunicar.', 'warning'); return; }
+    if (!generar) { window.app.showToast('La IA no está disponible ahora mismo.', 'warning'); return; }
+    if (area.value.trim() && !confirm('Se sustituirá el texto que hay ahora en el mensaje. ¿Continuar?')) return;
+
+    const prompt = `Redacta un MODELO DE COMUNICADO para la biblioteca de mensajes a familias.
+
+QUÉ HAY QUE COMUNICAR: ${pedido}
+TONO: ${tono}
+${titulo.value.trim() ? `TÍTULO QUE HA PUESTO LA DOCENTE: ${titulo.value.trim()}\n` : ''}
+Es una plantilla reutilizable:
+- No escribas nombres reales de alumnos. Usa los marcadores {nombre_alumno} y {asignatura} cuando haga falta, y [Fecha/Hora], [Grupo], [Lugar] o [Importe] para los datos que la docente rellenará al enviarlo.
+- Texto plano, listo para copiar en el correo, la plataforma del centro o WhatsApp: SIN Markdown, sin asteriscos, sin almohadillas ni tablas.
+
+Responde EXACTAMENTE con este formato:
+Título: (un título corto para la biblioteca)
+Categoría: (una de: Tutoría & Reuniones, Seguimiento Académico, Reconocimiento y Felicitación, Exámenes y Evaluación, Atención a la Diversidad / NEAE, Salidas y Excursiones, Avisos generales)
+
+(el texto completo del mensaje)`;
+
+    btn.disabled = true; estado.textContent = 'Carmen está escribiendo…'; area.value = '';
+    try {
+      const limpiar = (t) => t
+        .replace(/\n?-{3,}\s*\n?\s*(✅|⚠️)[^\n]*/g, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s*/gm, '').trim();
+      const separar = (t) => {
+        const m = t.match(/^\s*T[íi]tulo:\s*(.+)\n\s*Categor[íi]a:\s*(.+)\n+([\s\S]*)$/i);
+        return m ? { titulo: m[1].trim(), categoria: m[2].trim(), texto: m[3].trim() } : { texto: t };
+      };
+      const full = await generar({ especialistaId: 'carmen', tipo: 'familias', prompt }, (parcial) => { area.value = separar(limpiar(parcial)).texto; });
+      const r = separar(limpiar(full));
+      area.value = r.texto;
+      if (r.titulo && !titulo.value.trim()) titulo.value = r.titulo;
+      if (r.categoria && !categoria.value.trim()) categoria.value = r.categoria;
+      estado.textContent = 'Listo. Revísalo y cámbialo lo que quieras antes de guardar.';
+    } catch (e) {
+      estado.textContent = '';
+      if (e && e.message !== 'limite') window.app.showToast('No se pudo generar. Inténtalo de nuevo.', 'warning');
+    } finally { btn.disabled = false; }
   }
 
   saveTemplateFromModal() {
