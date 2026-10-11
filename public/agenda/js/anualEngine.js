@@ -20,11 +20,21 @@ class AnualEngine {
     // Inicio/Fin de curso calculados a partir de la fecha real configurada
     // (antes eran textos fijos, "7 SEP 2026", que no cambiaban aunque cambiaras la fecha)
     const monthsAbbr = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-    const courseStart = new Date(window.store.state.startDate);
-    const courseEnd = new Date(courseStart);
-    courseEnd.setDate(courseEnd.getDate() + 12 * 30 - 8); // ~12 meses después, ajustado a viernes de la última semana
+    const courseStart = new Date(window.store.state.startDate + 'T00:00:00');
+    // Fin de curso: el que haya puesto la docente; si no, aproximado (~12 meses)
+    const finPuesto = !!window.store.state.endDate;
+    const courseEnd = finPuesto ? new Date(window.store.state.endDate + 'T00:00:00') : new Date(courseStart);
+    if (!finPuesto) courseEnd.setDate(courseEnd.getDate() + 12 * 30 - 8);
     const fmtCourseDate = (d) => `${d.getDate()} ${monthsAbbr[d.getMonth()]} ${d.getFullYear()}`;
-    const totalWeeks = Math.round((courseEnd - courseStart) / (1000 * 60 * 60 * 24 * 7));
+    const totalWeeks = Math.max(0, Math.ceil(((courseEnd - courseStart) / 86400000 + 1) / 7));
+    const diasLectivos = this.contarDiasLectivos(courseStart, courseEnd, holidays);
+    const ed = this.editandoFechas;
+    const hEsc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const holidaysOrdenados = holidays.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const fmtFestivo = (h) => {
+      const f = (x) => { const d = new Date(x + 'T00:00:00'); return isNaN(d) ? x : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }); };
+      return h.endDate && h.endDate !== h.date ? `${f(h.date)} → ${f(h.endDate)}` : f(h.date);
+    };
 
     container.innerHTML = `
       <!-- TOP BANNER KPI SUMMARY -->
@@ -41,13 +51,13 @@ class AnualEngine {
             <div class="stat-card" style="min-width: 140px; padding: 0.85rem 1.1rem;">
               <div>
                 <div class="stat-label">Inicio del Curso</div>
-                <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--text-primary);">${fmtCourseDate(courseStart)}</div>
+                <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--text-primary);">${fmtCourseDate(window.store.state.firstClassDay ? new Date(window.store.state.firstClassDay + 'T00:00:00') : courseStart)}</div>
               </div>
             </div>
 
             <div class="stat-card" style="min-width: 140px; padding: 0.85rem 1.1rem;">
               <div>
-                <div class="stat-label">Fin del Curso (aprox.)</div>
+                <div class="stat-label">Fin del Curso${finPuesto ? '' : ' (aprox.)'}</div>
                 <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--text-primary);">${fmtCourseDate(courseEnd)}</div>
               </div>
             </div>
@@ -61,12 +71,29 @@ class AnualEngine {
 
             <div class="stat-card" style="min-width: 110px; padding: 0.85rem 1.1rem;">
               <div>
-                <div class="stat-label">Días Lectivos (aprox.)</div>
-                <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; color: #10b981;">${totalWeeks * 5}</div>
+                <div class="stat-label">Días Lectivos</div>
+                <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; color: #10b981;">${diasLectivos}</div>
               </div>
             </div>
+            <button class="btn btn-secondary" style="align-self: center;" onclick="window.anualEngine.toggleEditarFechas()">
+              <i class="fa-solid fa-pen"></i> Cambiar fechas del curso
+            </button>
           </div>
         </div>
+        ${ed ? `
+          <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem;">
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label">Primer día de clase</label>
+              <input type="date" id="anual-inicio" class="form-input" value="${window.store.state.firstClassDay || window.store.state.startDate}">
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label">Último día de clase</label>
+              <input type="date" id="anual-fin" class="form-input" value="${window.store.state.endDate || ''}">
+            </div>
+            <button class="btn btn-primary" onclick="window.anualEngine.guardarFechas()"><i class="fa-solid fa-check"></i> Guardar fechas</button>
+            <button class="btn btn-outline" onclick="window.anualEngine.toggleEditarFechas()">Cancelar</button>
+            <p style="flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--text-muted);">Las semanas del horario se cuentan desde el lunes de la semana en la que empieza el curso. Tus sesiones ya planificadas no se borran.</p>
+          </div>` : ''}
       </div>
 
       <!-- GRID LAYOUT: CALENDARIO 12 MESES & LATERAL -->
@@ -164,17 +191,35 @@ class AnualEngine {
               <i class="fa-solid fa-umbrella-beach" style="color: #f59e0b;"></i> Vacaciones y Festivos
             </h4>
             <div style="display: flex; flex-direction: column; gap: 0.65rem;">
-              ${holidays.map(h => `
-                <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-tertiary); padding: 0.65rem 0.85rem; border-radius: var(--radius-md);">
-                  <div>
-                    <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary);">${h.name}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">${h.date}</div>
+              ${holidaysOrdenados.length === 0 ? `<p style="font-size: 0.82rem; color: var(--text-muted);">Aún no hay festivos ni vacaciones.</p>` : ''}
+              ${holidaysOrdenados.map(h => `
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: var(--bg-tertiary); padding: 0.65rem 0.85rem; border-radius: var(--radius-md);">
+                  <div style="min-width: 0;">
+                    <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary);">${hEsc(h.name)}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">${fmtFestivo(h)}</div>
                   </div>
-                  <span style="font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); ${h.type === 'Festivo' ? 'background: #d1fae5; color: #047857;' : 'background: #ffedd5; color: #c2410c;'}">
-                    ${h.type}
-                  </span>
+                  <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                    <span style="font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); ${h.type === 'Festivo' ? 'background: #d1fae5; color: #047857;' : 'background: #ffedd5; color: #c2410c;'}">
+                      ${hEsc(h.type)}
+                    </span>
+                    <button onclick="window.anualEngine.borrarFestivo('${h.id}')" style="border: none; background: none; color: var(--text-muted); cursor: pointer;" title="Quitar">✕
+                    </button>
+                  </div>
                 </div>
               `).join('')}
+            </div>
+            <div style="margin-top: 0.85rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <input id="festivo-nombre" class="form-input" placeholder="Nombre (p. ej. Navidad)" style="grid-column: 1 / -1;">
+              <div><label class="form-label" style="font-size: 0.72rem;">Desde</label><input type="date" id="festivo-desde" class="form-input"></div>
+              <div><label class="form-label" style="font-size: 0.72rem;">Hasta (opcional)</label><input type="date" id="festivo-hasta" class="form-input"></div>
+              <select id="festivo-tipo" class="form-input">
+                <option value="Festivo">Festivo</option>
+                <option value="Vacaciones">Vacaciones</option>
+                <option value="No lectivo">No lectivo</option>
+              </select>
+              <button onclick="window.anualEngine.anadirFestivo()" style="border: 1px dashed var(--border-color); background: none; color: var(--accent-primary); font-size: 0.8rem; font-weight: 600; padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer;">
+                <i class="fa-solid fa-plus"></i> Añadir
+              </button>
             </div>
           </div>
 
@@ -247,7 +292,9 @@ class AnualEngine {
     for (let day = 1; day <= daysInMonth; day++) {
       const weekday = (leadingBlanks + day - 1) % 7; // 5=sábado, 6=domingo
       const isWeekend = weekday === 5 || weekday === 6;
-      cells += `<span class="${isWeekend ? 'weekend' : ''}">${day}</span>`;
+      const fiesta = this.festivoDe(new Date(year, monthIndex, day));
+      const estilo = fiesta && !isWeekend ? (fiesta.type === 'Festivo' ? 'background:#d1fae5;color:#047857;border-radius:4px;font-weight:700;' : 'background:#ffedd5;color:#c2410c;border-radius:4px;font-weight:700;') : '';
+      cells += `<span class="${isWeekend ? 'weekend' : ''}" style="${estilo}"${fiesta ? ` title="${String(fiesta.name).replace(/"/g, '&quot;')}"` : ''}>${day}</span>`;
     }
 
     return `
@@ -259,6 +306,77 @@ class AnualEngine {
         </div>
       </div>
     `;
+  }
+
+  // ── Fechas del curso y festivos (añadido en la versión fusionada) ──────────
+  toggleEditarFechas() {
+    this.editandoFechas = !this.editandoFechas;
+    this.renderAnualView();
+  }
+
+  guardarFechas() {
+    const ini = document.getElementById('anual-inicio')?.value;
+    const fin = document.getElementById('anual-fin')?.value || '';
+    if (!ini) { window.app.showToast('Pon el primer día de clase.', 'warning'); return; }
+    if (fin && fin <= ini) { window.app.showToast('El último día tiene que ser después del primero.', 'warning'); return; }
+    // El horario cuenta las semanas desde un LUNES: se usa el lunes de esa semana
+    const d = new Date(ini + 'T00:00:00');
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const lunes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    window.store.state.endDate = fin || null;
+    window.store.state.firstClassDay = ini;
+    window.dateEngine.setCourseStartDate(lunes);
+    this.editandoFechas = false;
+    this.renderAnualView();
+    try { window.app.refreshAll(); window.app.updateDateMotorUI && window.app.updateDateMotorUI(); } catch (e) { console.error(e); }
+    window.app.showToast('Fechas del curso guardadas.', 'success');
+  }
+
+  anadirFestivo() {
+    const nombre = (document.getElementById('festivo-nombre')?.value || '').trim();
+    const desde = document.getElementById('festivo-desde')?.value;
+    const hasta = document.getElementById('festivo-hasta')?.value || '';
+    const tipo = document.getElementById('festivo-tipo')?.value || 'Festivo';
+    if (!nombre || !desde) { window.app.showToast('Pon el nombre y la fecha.', 'warning'); return; }
+    if (hasta && hasta < desde) { window.app.showToast('«Hasta» no puede ser antes de «Desde».', 'warning'); return; }
+    window.store.state.holidays = window.store.state.holidays || [];
+    window.store.state.holidays.push({ id: 'HOL-' + Date.now(), name: nombre, date: desde, endDate: hasta || null, type: tipo });
+    window.store.saveState();
+    this.renderAnualView();
+  }
+
+  borrarFestivo(id) {
+    const h = (window.store.state.holidays || []).find(x => x.id === id);
+    if (!h || !confirm(`¿Quitar «${h.name}»?`)) return;
+    window.store.state.holidays = window.store.state.holidays.filter(x => x.id !== id);
+    window.store.saveState();
+    this.renderAnualView();
+  }
+
+  // ¿Ese día es festivo o vacaciones? Devuelve el festivo o null
+  festivoDe(fecha) {
+    const t = new Date(fecha); t.setHours(0, 0, 0, 0);
+    return (window.store.state.holidays || []).find(h => {
+      const a = new Date(h.date + 'T00:00:00'); const b = new Date((h.endDate || h.date) + 'T00:00:00');
+      return !isNaN(a) && t >= a && t <= b;
+    }) || null;
+  }
+
+  // Días de lunes a viernes entre dos fechas, sin contar festivos ni vacaciones
+  contarDiasLectivos(inicio, fin, festivos) {
+    const libres = new Set();
+    (festivos || []).forEach(h => {
+      const a = new Date(h.date + 'T00:00:00'); const b = new Date((h.endDate || h.date) + 'T00:00:00');
+      if (isNaN(a) || isNaN(b)) return;
+      for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) libres.add(d.toDateString());
+    });
+    const primero = window.store.state.firstClassDay ? new Date(window.store.state.firstClassDay + 'T00:00:00') : inicio;
+    let n = 0;
+    for (const d = new Date(primero); d <= fin; d.setDate(d.getDate() + 1)) {
+      const dia = d.getDay();
+      if (dia !== 0 && dia !== 6 && !libres.has(d.toDateString())) n++;
+    }
+    return n;
   }
 
   toggleGoal(goalId) {
