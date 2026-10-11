@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AulaAI - Agenda Docente Semanal & Pipeline Interactivo</title>
+  
+  <!-- FontAwesome 6 Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- App Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/planner.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/fusion.css">
+</head>
+<body>
+
+  <!-- PANTALLA DE ACCESO: se ve antes de iniciar sesión -->
+  <div id="auth-screen" style="display:flex; min-height:100vh; align-items:center; justify-content:center; background: var(--bg-primary); padding: 1.5rem;">
+    <div id="auth-box" style="width:100%; max-width: 380px;"></div>
+  </div>
+
+  <div id="app-container" style="display:none;">
+
+    <!-- ==================== SIDEBAR ==================== -->
+    <aside class="sidebar">
+      <div>
+        <div class="brand-container">
+          <div class="brand-icon">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <div class="brand-title">AulaAI</div>
+            <span class="brand-tag">Agenda Docente</span>
+          </div>
+        </div>
+
+        <nav>
+          <ul class="nav-menu">
+            <li class="nav-item active" data-view-target="horario">
+              <button onclick="window.app.switchView('horario')">
+                <i class="fa-solid fa-calendar-week"></i>
+                <span>Programación & Pipeline</span>
+              </button>
+            </li>
+            <li class="nav-item" data-view-target="anual">
+              <button onclick="window.app.switchView('anual')">
+                <i class="fa-solid fa-calendar-days"></i>
+                <span>Vista Anual</span>
+              </button>
+            </li>
+            <li class="nav-item" data-view-target="clases">
+              <button onclick="window.app.switchView('clases')">
+                <i class="fa-solid fa-chalkboard"></i>
+                <span>Mis Clases & Plano</span>
+              </button>
+            </li>
+            <li class="nav-item" data-view-target="alumnado">
+              <button onclick="window.app.switchView('alumnado')">
+                <i class="fa-solid fa-user-graduate"></i>
+                <span>Alumnado & NEAE</span>
+              </button>
+            </li>
+            <li class="nav-item" data-view-target="listados">
+              <button onclick="window.app.switchView('listados')">
+                <i class="fa-solid fa-clipboard-check"></i>
+                <span>Listado del Grupo</span>
+              </button>
+            </li>
+            <li class="nav-item" data-view-target="mensajes">
+              <button onclick="window.app.switchView('mensajes')">
+                <i class="fa-regular fa-comments"></i>
+                <span>Mensajes Familias</span>
+              </button>
+            </li>
+            <li class="nav-item" data-view-target="sustitucion">
+              <button onclick="window.app.switchView('sustitucion')">
+                <i class="fa-solid fa-folder-open"></i>
+                <span>Carpeta Sustitución</span>
+              </button>
+            </li>
+          </ul>
+
+          <div style="height: 1px; background: var(--border-color); margin: 0.85rem 0.5rem;"></div>
+
+          <ul class="nav-menu">
+            <li class="nav-item">
+              <a href="https://aula-ia-nine.vercel.app" target="_blank" rel="noopener">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                <span>Ir a AulaIA</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+    <!-- ==================== MAIN CONTENT WRAPPER ==================== -->
+    <div class="main-wrapper">
+
+      <!-- TOP NAVBAR -->
+      <header class="top-header">
+        <div class="header-title-group">
+          <h1 class="page-heading" id="page-title-heading">Programación Semanal & Pipeline</h1>
+        </div>
+
+        <div class="header-actions">
+          <button class="btn btn-outline btn-icon-only" onclick="window.app.toggleTheme()" title="Cambiar Tema Claro/Oscuro">
+            <i class="fa-solid fa-moon"></i>
+          </button>
+
+          <button class="btn btn-secondary" onclick="window.app.openSlotsModal()">
+            <i class="fa-solid fa-clock"></i> Configurar Horario
+          </button>
+
+          <button class="btn btn-secondary" onclick="window.app.openModal('modal-course-clone')">
+            <i class="fa-solid fa-rotate-left"></i> Reutilizar / Clonar Curso
+          </button>
+
+          <button class="btn btn-outline btn-icon-only" onclick="window.authGate.signOut()" title="Cerrar sesión">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- CONTENT AREA -->
+      <main class="content-area">
+
+        <!-- ==================== VIEW 1: HORARIO & PIPELINE ==================== -->
+        <section id="view-horario" class="view-panel active-view">
+          
+          <!-- Planner Toolbar (Date Motor & Zoom Controls) -->
+          <div class="planner-toolbar">
+            <div class="date-motor-group">
+              <button class="btn btn-outline btn-icon-only" onclick="window.app.navigateWeek(-1)" title="Semana Anterior">
+                <i class="fa-solid fa-chevron-left"></i>
+              </button>
+
+              <div class="week-badge">
+                <i class="fa-regular fa-calendar"></i>
+                <span id="current-week-label">Cargando semana...</span>
+              </div>
+
+              <button class="btn btn-outline btn-icon-only" onclick="window.app.navigateWeek(1)" title="Semana Siguiente">
+                <i class="fa-solid fa-chevron-right"></i>
+              </button>
+
+              <span class="trimester-tag" id="trimester-tag-label">1º Trimestre</span>
+            </div>
+
+            <!-- Zoom & Compact/Expanded View Controls -->
+            <div class="grid-controls">
+              <div class="zoom-control-group">
+                <i class="fa-solid fa-magnifying-glass-minus"></i>
+                <input type="range" id="zoom-slider" class="zoom-slider" min="0.8" max="1.2" step="0.05" value="1">
+                <i class="fa-solid fa-magnifying-glass-plus"></i>
+              </div>
+
+              <div class="view-mode-toggle">
+                <button class="view-mode-btn" data-mode="compact" onclick="window.app.setGridMode('compact')">Compacta</button>
+                <button class="view-mode-btn active" data-mode="normal" onclick="window.app.setGridMode('normal')">Normal</button>
+                <button class="view-mode-btn" data-mode="expanded" onclick="window.app.setGridMode('expanded')">Ampliada</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weekly Grid Timetable -->
+          <div id="planner-grid-wrapper" class="planner-grid-wrapper">
+            <table class="planner-table">
+              <thead>
+                <tr>
+                  <th class="time-col-header">Horario</th>
+                  <th>Lunes <span class="day-header-subtitle" id="day-date-LUN">--/--</span></th>
+                  <th>Martes <span class="day-header-subtitle" id="day-date-MAR">--/--</span></th>
+                  <th>Miércoles <span class="day-header-subtitle" id="day-date-MIE">--/--</span></th>
+                  <th>Jueves <span class="day-header-subtitle" id="day-date-JUE">--/--</span></th>
+                  <th>Viernes <span class="day-header-subtitle" id="day-date-VIE">--/--</span></th>
+                </tr>
+              </thead>
+              <tbody id="planner-tbody">
+                <!-- Dynamically generated by app.js -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 2: VISTA ANUAL ==================== -->
+        <section id="view-anual" class="view-panel">
+          <div id="anual-view-container">
+            <!-- Dynamically generated by anualEngine.js -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 3: MIS CLASES & PLANO ==================== -->
+        <section id="view-clases" class="view-panel">
+          <div id="clases-view-container">
+            <!-- Dynamically generated by clasesEngine.js -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 4: ALUMNADO & NEAE ==================== -->
+        <section id="view-alumnado" class="view-panel">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+            <p style="color: var(--text-secondary); font-size: 0.95rem;">
+              Registro de pasaportes de alumnado, atención a la diversidad y adaptaciones NEAE.
+            </p>
+
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-outline" onclick="window.alumnoEngine.renderStudentsList(false)">Ver Todos</button>
+              <button class="btn btn-secondary" onclick="window.alumnoEngine.renderStudentsList(true)">
+                <i class="fa-solid fa-filter" style="color: #dc2626;"></i> Solo NEAE
+              </button>
+              <button class="btn btn-primary" onclick="window.alumnoEngine.openEditStudentModal('')">
+                <i class="fa-solid fa-plus"></i> Nuevo Alumno
+              </button>
+            </div>
+          </div>
+
+          <div id="students-grid-container" class="students-grid">
+            <!-- Dynamically generated by alumnoEngine.js -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW: LISTADO DEL GRUPO ==================== -->
+        <section id="view-listados" class="view-panel">
+          <div id="listados-view-container">
+            <!-- Dynamically generated by checklistEngine.js -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 5: BANCO DE MENSAJES ==================== -->
+        <section id="view-mensajes" class="view-panel">
+          <div style="margin-bottom: 1.25rem;">
+            <p style="color: var(--text-secondary); font-size: 0.95rem;">
+              Banco de plantillas profesionales de comunicación con familias. Copia y personaliza en segundos.
+            </p>
+          </div>
+
+          <div id="templates-grid-container" class="template-grid">
+            <!-- Dynamically generated by templatesEngine.js -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 6: CARPETA DE SUSTITUCIÓN ==================== -->
+        <section id="view-sustitucion" class="view-panel">
+          <div id="substitution-content">
+            <!-- Dynamically generated by templatesEngine.js -->
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- MODAL: EXPANDED LESSON DETAIL -->
+  <div id="modal-lesson" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-pen-to-square" style="color: var(--accent-primary);"></i>
+          <span id="modal-lesson-title-display">Detalle de Clase</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-lesson')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Asignatura</label>
+            <select id="modal-subject-select" class="form-select">
+              <option value="MATES">Matemáticas</option>
+              <option value="LENGUA">Lengua Castellana</option>
+              <option value="CIENCIAS">Ciencias Naturales</option>
+              <option value="SOCIALES">Ciencias Sociales</option>
+              <option value="INGLES">Inglés</option>
+              <option value="EF">Educación Física</option>
+              <option value="MUSICA">Música</option>
+              <option value="ARTISTICA">Educación Artística</option>
+              <option value="RELIGION">Religión</option>
+              <option value="REFUERZO">Refuerzo</option>
+              <option value="TUTORIA">Tutoría</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Grupo / Clase</label>
+            <input type="text" id="modal-group-input" class="form-input" placeholder="Ej. 2ºA">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Estado</label>
+            <select id="modal-status-select" class="form-select">
+              <option value="pending">Pendiente</option>
+              <option value="done">Impartida</option>
+              <option value="shifted">Reprogramada</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Título de la Sesión / Unidad Didáctica</label>
+          <input type="text" id="modal-title-input" class="form-input" placeholder="Ej. Unidad 4: Fracciones y Decimales">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Actividades, Tareas y Observaciones de Aula</label>
+          <textarea id="modal-notes-input" class="form-textarea" rows="4" placeholder="Escribe aquí las actividades de la sesión, ejercicios del libro o recursos utilizados..."></textarea>
+        </div>
+
+        <div class="form-group" style="background: #fef2f2; padding: 1rem; border-radius: var(--radius-md); border: 1px solid #fecdd3;">
+          <label class="form-label" style="color: #9f1239;">
+            <i class="fa-solid fa-triangle-exclamation"></i> Adaptación / Atención NEAE para esta clase
+          </label>
+          <input type="text" id="modal-neae-input" class="form-input" placeholder="Ej. Simplificar enunciados para Lucas M. / Tiempo extra">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-lesson')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.app.saveLessonFromModal()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar Cambios
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT / NEW STUDENT -->
+  <div id="modal-student" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-id-card" style="color: var(--accent-primary);"></i>
+          <span>Ficha de Alumno/a</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-student')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="edit-student-id">
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-label">Nombre Completo</label>
+            <input type="text" id="edit-student-name" class="form-input" placeholder="Ej. Lucas Martín García">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Grupo</label>
+            <input type="text" id="edit-student-group" class="form-input" placeholder="Ej. 2ºA">
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.75rem; background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-md);">
+          <input type="checkbox" id="edit-student-neae" style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+          <label for="edit-student-neae" style="font-weight: 600; font-size: 0.9rem; cursor: pointer;">
+            Requiere Atención NEAE (Necesidades Específicas)
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Necesidad / Diagnóstico</label>
+          <input type="text" id="edit-student-neaetype" class="form-input" placeholder="Ej. DEA (Dislexia), TDAH, Altas Capacidades...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Cumpleaños</label>
+            <input type="date" id="edit-student-birthday" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Conducta</label>
+            <select id="edit-student-behavior" class="form-select">
+              <option value="">Sin registrar</option>
+              <option value="Excelente">Excelente</option>
+              <option value="Bueno">Bueno</option>
+              <option value="Correcta">Correcta</option>
+              <option value="A mejorar">A mejorar</option>
+              <option value="Inadecuada">Inadecuada</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Pautas y Observaciones Individuales</label>
+          <textarea id="edit-student-notes" class="form-textarea" rows="3" placeholder="Pautas para el profesorado, descansos, metodología adaptada..."></textarea>
+        </div>
+
+        <div style="height: 1px; background: var(--border-color); margin: 0.25rem 0;"></div>
+        <h4 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary);">
+          <i class="fa-solid fa-house-user" style="color: var(--accent-primary);"></i> Contacto familiar
+        </h4>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Padre / Madre / Tutor/a</label>
+            <input type="text" id="edit-student-parentname" class="form-input" placeholder="Ej. Laura Martín">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email de contacto</label>
+            <input type="email" id="edit-student-parentemail" class="form-input" placeholder="familia@ejemplo.com">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Teléfonos</label>
+          <div id="edit-student-phones-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+          <button type="button" onclick="window.alumnoEngine.addPhoneField()" style="margin-top: 0.6rem; border: 1px dashed var(--border-color); background: none; color: var(--accent-primary); font-size: 0.82rem; font-weight: 600; padding: 6px 10px; border-radius: var(--radius-md); cursor: pointer; width: 100%;">
+            <i class="fa-solid fa-plus"></i> Añadir teléfono
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="modal-student-delete-btn" onclick="window.alumnoEngine.deleteStudentFromModal()" style="margin-right: auto; color: #dc2626; border-color: #fecaca;">
+          <i class="fa-solid fa-trash"></i> Eliminar
+        </button>
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-student')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.alumnoEngine.saveStudentFromModal()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar Ficha
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: FULL STUDENT 4-TAB PROFILE -->
+  <div id="modal-student-full" class="modal-overlay">
+    <div class="modal-container" style="max-width: 620px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div class="student-avatar" id="full-student-avatar-letter">A</div>
+          <div>
+            <div id="full-student-name" style="font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;">Ana García López</div>
+            <div id="full-student-group" style="font-size: 0.8rem; color: var(--text-muted);">Grupo 2ºA</div>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-student-full')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+          <span style="font-size: 0.8rem; font-weight: 700; background: var(--accent-light); color: var(--accent-primary); padding: 4px 10px; border-radius: var(--radius-sm);">Académico</span>
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); padding: 4px 10px;">Conducta</span>
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); padding: 4px 10px;">Apoyo NEAE</span>
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); padding: 4px 10px;">Salud</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.88rem;">
+          <div><strong>Fecha de nacimiento:</strong> <span id="full-student-birthday">12/04/2015</span></div>
+          <div><strong>Padre / Madre / Tutor:</strong> <span id="full-student-parent">Laura Martín</span></div>
+          <div><strong>Teléfono(s) de contacto:</strong> <span id="full-student-phones">—</span></div>
+          <div><strong>Email familia:</strong> <span id="full-student-email">familia.garcia@email.com</span></div>
+          <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: var(--radius-md); margin-top: 0.5rem;">
+            <strong>Observaciones del Tutor/a:</strong>
+            <p id="full-student-notes" style="color: var(--text-secondary); margin-top: 4px;">Alumna responsable y participativa.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="window.app.closeModal('modal-student-full')">Cerrar Ficha</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: COURSE CLONE / MOTOR DE FECHAS -->
+  <div id="modal-course-clone" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-primary);"></i>
+          <span>Motor de Fechas y Reutilización de Curso</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-course-clone')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 0.92rem; line-height: 1.5;">
+          ¡No empieces de cero cada septiembre! El motor de fechas recalcula automáticamente todo el calendario escolar manteniendo las estructuras de tus asignaturas.
+        </p>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">Fecha de Inicio del Nuevo Curso (Primer Lunes)</label>
+          <input type="date" id="course-start-date-input" class="form-input" value="2026-09-07">
+        </div>
+
+        <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); font-size: 0.85rem; color: var(--text-secondary);">
+          <i class="fa-solid fa-circle-info" style="color: var(--accent-primary);"></i>
+          Al hacer clic en "Regenerar Calendario", se actualizarán automáticamente las 52 semanas del curso escolar manteniendo tus plantillas de asignaturas y alumnado.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-course-clone')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.dateEngine.setCourseStartDate(document.getElementById('course-start-date-input').value); window.app.closeModal('modal-course-clone'); window.app.showToast('¡Calendario de curso regenerado con éxito!', 'success');">
+          <i class="fa-solid fa-arrows-rotate"></i> Regenerar Calendario
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NUEVA / EDITAR CLASE -->
+  <div id="modal-class" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-chalkboard" style="color: var(--accent-primary);"></i>
+          <span id="modal-class-title-display">Nueva Clase / Grupo</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-class')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="edit-class-id">
+
+        <div class="form-group">
+          <label class="form-label">Nombre del grupo</label>
+          <input type="text" id="edit-class-name" class="form-input" placeholder="Ej. 2ºA">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Asignatura</label>
+          <input type="text" id="edit-class-subject" class="form-input" placeholder="Ej. Ciencias Naturales">
+        </div>
+
+        <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: var(--radius-md); font-size: 0.82rem; color: var(--text-secondary);">
+          <i class="fa-solid fa-circle-info" style="color: var(--accent-primary);"></i>
+          El número de alumnos se calcula automáticamente a partir del alumnado que asignes a este grupo desde "Alumnado &amp; NEAE" (campo "Grupo").
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-class')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.clasesEngine.saveClassFromModal()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar Clase
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ASIGNAR ASIENTO -->
+  <div id="modal-seat" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-chair" style="color: var(--accent-primary);"></i>
+          <span>Asignar Pupitre</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-seat')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="edit-seat-id">
+
+        <div class="form-group">
+          <label class="form-label">Alumno/a en este pupitre</label>
+          <select id="edit-seat-student" class="form-select"></select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="modal-seat-view-profile-btn" onclick="window.clasesEngine.viewSeatProfile()" style="margin-right: auto;">
+          <i class="fa-solid fa-id-card"></i> Ver ficha
+        </button>
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-seat')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.clasesEngine.saveSeatFromModal()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NUEVO / EDITAR COMUNICADO -->
+  <div id="modal-template" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-regular fa-comment-dots" style="color: var(--accent-primary);"></i>
+          <span id="modal-template-title-display">Nuevo Comunicado</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-template')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="edit-template-id">
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-label">Título del comunicado</label>
+            <input type="text" id="edit-template-title" class="form-input" placeholder="Ej. Recordatorio de excursión">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Categoría</label>
+            <input type="text" id="edit-template-category" class="form-input" placeholder="Ej. Salidas y Excursiones">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Texto del mensaje</label>
+          <textarea id="edit-template-text" class="form-textarea" rows="10" placeholder="Estimada familia de {nombre_alumno}:&#10;&#10;..."></textarea>
+        </div>
+
+        <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: var(--radius-md); font-size: 0.82rem; color: var(--text-secondary);">
+          <i class="fa-solid fa-circle-info" style="color: var(--accent-primary);"></i>
+          Puedes usar marcadores como <code>{nombre_alumno}</code>, <code>{asignatura}</code>, <code>[Fecha/Hora]</code>, <code>[Grupo]</code> — quedan en el texto para que los rellenes al copiar el mensaje.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-template')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.templatesEngine.saveTemplateFromModal()">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar en la Biblioteca
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIGURAR HORARIO (HORAS DEL DÍA) -->
+  <div id="modal-slots" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-clock" style="color: var(--accent-primary);"></i>
+          <span>Configurar Horario</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-slots')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.5;">
+          Cada docente tiene un horario distinto — edita aquí las horas de tu día (nombre y franja horaria), añade o quita las que necesites, y marca los recreos. Los cambios se guardan solos y se reflejan en toda la programación.
+        </p>
+
+        <div id="slots-editor-list" style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem;"></div>
+
+        <button onclick="window.app.addSlot()" style="margin-top: 0.85rem; border: 1px dashed var(--border-color); background: none; color: var(--accent-primary); font-size: 0.85rem; font-weight: 600; padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer; width: 100%;">
+          <i class="fa-solid fa-plus"></i> Añadir hora
+        </button>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="window.app.closeModal('modal-slots')">Hecho</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NUEVA LISTA DE ENTREGA -->
+  <div id="modal-checklist" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-list-check" style="color: var(--accent-primary);"></i>
+          <span>Nueva Lista de Entrega</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-checklist')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">¿Qué estás registrando?</label>
+          <input type="text" id="edit-checklist-title" class="form-input" placeholder="Ej. Autorización excursión al museo, Dinero salida fin de curso, Tarea Tema 3...">
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.75rem; background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-md);">
+          <input type="checkbox" id="edit-checklist-hasgrade" style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+          <label for="edit-checklist-hasgrade" style="font-weight: 600; font-size: 0.9rem; cursor: pointer;">
+            También quiero apuntar una nota (para tareas o exámenes)
+          </label>
+        </div>
+
+        <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: var(--radius-md); font-size: 0.82rem; color: var(--text-secondary);">
+          <i class="fa-solid fa-circle-info" style="color: var(--accent-primary);"></i>
+          Se creará para el grupo que tengas seleccionado arriba. Después, con un solo clic marcas a cada alumno/a como entregado.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-checklist')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.checklistEngine.saveChecklistFromModal()">
+          <i class="fa-solid fa-floppy-disk"></i> Crear Lista
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SUBIR DOCUMENTO -->
+  <div id="modal-document-upload" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fa-solid fa-upload" style="color: var(--accent-primary);"></i>
+          <span>Subir Documento</span>
+        </div>
+        <button class="modal-close-btn" onclick="window.app.closeModal('modal-document-upload')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Título</label>
+          <input type="text" id="edit-document-title" class="form-input" placeholder="Ej. Autorización salida al teatro - Ana García">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">¿De qué alumno/a es? (opcional)</label>
+          <select id="edit-document-student" class="form-select"></select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Archivo (PDF o foto)</label>
+          <input type="file" id="edit-document-file" class="form-input" accept="application/pdf,image/*">
+        </div>
+
+        <div style="background: var(--bg-tertiary); padding: 0.85rem; border-radius: var(--radius-md); font-size: 0.82rem; color: var(--text-secondary);">
+          <i class="fa-solid fa-lock" style="color: var(--accent-primary);"></i>
+          El archivo se guarda de forma privada — solo tú puedes acceder a él.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="window.app.closeModal('modal-document-upload')">Cancelar</button>
+        <button class="btn btn-primary" onclick="window.checklistEngine.uploadDocumentFromModal()">
+          <i class="fa-solid fa-upload"></i> Subir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container"></div>
+
+  <!-- App Scripts -->
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/dateEngine.js"></script>
+  <script src="js/pipeline.js"></script>
+  <script src="js/alumnoEngine.js"></script>
+  <script src="js/templatesEngine.js"></script>
+  <script src="js/anualEngine.js"></script>
+  <script src="js/clasesEngine.js"></script>
+  <script src="js/checklistEngine.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/authGate.js"></script>
+  <script src="js/fusion.js"></script>
+</body>
+</html>

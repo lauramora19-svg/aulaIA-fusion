@@ -1,0 +1,5 @@
+/* Versión fusionada: el menú lo pone AulaIA, así que se ocultan el menú lateral
+   propio de la Agenda y el botón de cerrar sesión. Todo lo demás, igual. */
+body.embebida .sidebar { display: none !important; }
+body.embebida .top-header .btn-icon-only[onclick*="signOut"] { display: none !important; }
+body.embebida #auth-screen { display: none !important; }
