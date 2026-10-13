@@ -2,16 +2,19 @@ import { useEffect, useState } from "react";
 import { adminUsuarios, adminPonerLimite, leerAjustes, guardarAjustes } from "../lib/equipo";
 import { fmtFecha } from "../lib/crm";
 import Campo from "../components/Campo";
+import { listarCargos, ponerCargo, CARGOS, ETAPAS_SUST } from "../lib/sustituciones";
 
 // Solo para la administradora: cuentas, consumo del mes y límites.
-export default function AdminPage() {
+export default function AdminPage({ onCargos }) {
   const [lista, setLista] = useState(null);
   const [aj, setAj] = useState(null);
   const [edit, setEdit] = useState({}); // id -> texto del límite
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
+  const [cargos, setCargos] = useState({}); // user_id -> { cargo, etapa }
 
   const cargar = async () => {
+    listarCargos().then(c => setCargos(Object.fromEntries(c.map(x => [x.user_id, x])))).catch(() => {});
     try { const [l, a] = await Promise.all([adminUsuarios(), leerAjustes()]); setAj(a); setLista(l); }
     catch (e) { setError(e.message); setAj(a => a || { limite_por_defecto: 30, precio_entrada_millon: 0, precio_salida_millon: 0 }); setLista([]); }
   };
@@ -32,6 +35,11 @@ export default function AdminPage() {
   const guardarAj = async (e) => {
     e.preventDefault(); setError(""); setOk("");
     try { await guardarAjustes(aj); setOk("Ajustes guardados."); cargar(); } catch (err) { setError(err.message); }
+  };
+  const cambiarCargo = async (u, cargo, etapa) => {
+    setError(""); setOk("");
+    try { await ponerCargo(u.id, cargo, etapa); setOk(cargo ? `${u.nombre || u.email}: ${CARGOS[cargo]}${cargo === "coordinacion" ? " de " + ETAPAS_SUST.find(e => e.id === (etapa || "pri")).nombre : ""}.` : `${u.nombre || u.email} ya no tiene cargo.`); cargar(); onCargos?.(); }
+    catch (e) { setError(e.message); }
   };
   const txtLimite = (n) => (n < 0 ? "Sin límite" : n);
 
@@ -79,6 +87,35 @@ export default function AdminPage() {
         </table>
       </div>
       <p className="field-hint">En «Límite propio»: un número, «sin límite», o vacío para usar el de por defecto.</p>
+
+      <h2 className="crm-hello-title" style={{ fontSize: 24, marginTop: 24 }}>🔒 Equipo directivo · Sustituciones</h2>
+      <p className="crm-muted">Solo estas personas verán el apartado «Sustituciones». La coordinación de etapa solo ve su etapa. El resto del profesorado no ve nada: solo recibe su propia sustitución.</p>
+      <div className="crm-table-wrap">
+        <table className="crm-table">
+          <thead><tr><th>Cuenta</th><th>Cargo</th><th>Etapa</th></tr></thead>
+          <tbody>
+            {lista.map(u => {
+              const c = cargos[u.id];
+              return (
+                <tr key={u.id}>
+                  <td><strong>{u.nombre || u.email}</strong>{u.nombre && <div className="crm-muted">{u.email}</div>}</td>
+                  <td>{u.rol === "admin" ? <span className="crm-muted">Administradora (lo ve todo)</span> : (
+                    <select className="input-tema crm-select" value={c?.cargo || ""} onChange={e => cambiarCargo(u, e.target.value, c?.etapa)} aria-label={`Cargo de ${u.nombre || u.email}`}>
+                      <option value="">— Sin cargo (profesorado) —</option>
+                      {Object.entries(CARGOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  )}</td>
+                  <td>{c?.cargo === "coordinacion" ? (
+                    <select className="input-tema crm-select" value={c.etapa || "pri"} onChange={e => cambiarCargo(u, "coordinacion", e.target.value)} aria-label="Etapa que coordina">
+                      {ETAPAS_SUST.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                    </select>
+                  ) : c?.cargo ? <span className="crm-muted">Todas</span> : <span className="crm-muted">—</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
