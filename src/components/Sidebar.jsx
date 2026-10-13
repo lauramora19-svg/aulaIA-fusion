@@ -1,6 +1,6 @@
 // Barra lateral de AulaIA (versión fusionada con la Agenda).
 // Usa las clases de botón ya existentes (navbar-link, doc-btn): no cambian.
-export default function Sidebar({ esAdmin, view, seccion, clases, claseActivaId, abierta, onCerrar, onGo, onNuevo, onNuevaClase, onConectarAgenda }) {
+export default function Sidebar({ esAdmin, esDirectivo, view, seccion, clases, claseActivaId, abierta, onCerrar, onGo, onNuevo, onNuevaClase, onConectarAgenda }) {
   const activo = (id, extra) => (id === "ag" ? view === "ag" && seccion === extra.seccion : view === id && !extra.claseId);
   const item = (id, emoji, label, extra = {}, accion) => (
     <button
@@ -54,6 +54,13 @@ export default function Sidebar({ esAdmin, view, seccion, clases, claseActivaId,
           {item("library", "📂", "Mis documentos")}
           {item("modelos", "📋", "Modelos del colegio")}
         </nav>
+
+        {esDirectivo && <>
+          <p className="crm-side-title">🔒 Dirección</p>
+          <nav className="crm-side-nav">
+            {item("sust", "🔁", "Sustituciones")}
+          </nav>
+        </>}
 
         <div className="crm-side-footer">
           <nav className="crm-side-nav">{ag("sustitucion", "🗂️", "Carpeta de sustitución")}{item("perfil", "👤", "Mi perfil docente")}{esAdmin && item("admin", "📊", "Usuarios y consumo")}</nav>
