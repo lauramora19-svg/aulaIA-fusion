@@ -1,0 +1,67 @@
+/* Gestor de sustituciones (clases nuevas; no cambia ningún estilo existente) */
+.sust-cabecera { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.sust-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sust-resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 14px 0; }
+.sust-kpi { background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; padding: 14px 16px; }
+.sust-kpi b { display: block; font-size: 26px; font-weight: 800; line-height: 1.2; }
+.sust-kpi span { font-size: 11px; font-weight: 700; color: #78716c; text-transform: uppercase; letter-spacing: .5px; }
+.sust-ausentes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 14px; }
+.sust-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; border-radius: 999px; background: #fff; border: 1px solid #e7e5e4; font-size: 13px; }
+.sust-pill button { border: 0; background: none; cursor: pointer; color: #78716c; font-size: 13px; padding: 4px 6px; border-radius: 999px; }
+.sust-pill button:hover { background: #fee2e2; color: #991b1b; }
+.sust-estado { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.sust-estado-pendiente { background: #fef3c7; color: #92400e; }
+.sust-estado-confirmada { background: #dcfce7; color: #166534; }
+.sust-estado-enviada { background: #dbeafe; color: #1e40af; }
+.sust-enterado { display: block; font-size: 11px; color: #166534; font-weight: 700; margin-top: 4px; }
+.sust-motivo { display: block; font-size: 12px; color: #57534e; margin-top: 4px; }
+.sust-fila-acciones { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.sust-btn { min-height: 38px; padding: 0 12px; border-radius: 10px; border: 0; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.sust-btn-ok { background: #15803d; color: #fff; }
+.sust-btn-enviar { background: #1d4ed8; color: #fff; }
+.sust-btn-suave { background: #fff; color: #1c1917; border: 1px solid #d6d3d1; }
+.sust-btn:disabled { opacity: .55; cursor: default; }
+.sust-sel { min-width: 210px; max-width: 280px; }
+.sust-obs { min-width: 160px; font-size: 13px; }
+.sust-fecha-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sust-fecha-nav .input-tema { max-width: 170px; }
+.sust-grid-wrap { overflow-x: auto; }
+.sust-grid { display: grid; grid-template-columns: 110px repeat(5, minmax(110px, 1fr)); gap: 6px; min-width: 720px; }
+.sust-grid-dia { font-size: 12px; font-weight: 800; color: #57534e; padding: 4px; }
+.sust-grid-tramo { font-size: 13px; font-weight: 800; display: flex; flex-direction: column; justify-content: center; }
+.sust-grid-tramo small { font-weight: 600; color: #78716c; }
+.sust-celda { min-height: 54px; border-radius: 10px; border: 1px dashed #d6d3d1; background: #fff; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px; text-align: center; line-height: 1.3; color: #a8a29e; }
+.sust-celda small { display: block; font-weight: 600; opacity: .85; }
+.sust-t-clase { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+.sust-t-guardia { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+.sust-t-refuerzo { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.sust-t-libre { background: #f5f5f4; color: #44403c; border: 1px dashed #a8a29e; }
+.sust-t-patio { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+.sust-leyenda { display: flex; flex-wrap: wrap; gap: 6px; }
+.sust-leyenda span { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.sust-tramos { display: flex; flex-wrap: wrap; gap: 8px; }
+.sust-tramo { padding: 6px 12px; border-radius: 999px; background: #fff7ed; color: #9a3412; font-size: 13px; font-weight: 700; }
+.sust-tramo-recreo { background: #f5f5f4; color: #57534e; }
+.sust-drop { border: 2px dashed #d6d3d1; border-radius: 14px; padding: 24px; text-align: center; background: #fafaf9; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.sust-dudoso td { background: #fffbeb; }
+.sust-barra { display: grid; grid-template-columns: 150px minmax(0, 1fr) 40px; gap: 12px; align-items: center; margin: 8px 0; font-size: 14px; }
+.sust-barra-fondo { height: 20px; border-radius: 6px; background: #f5f5f4; overflow: hidden; }
+.sust-barra-fondo div { height: 100%; background: #ea580c; border-radius: 6px; }
+.sust-privacidad { font-size: 13px; color: #44403c; background: #f5f5f4; border-radius: 12px; padding: 12px 14px; line-height: 1.5; }
+.sust-sesiones label { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #f0efee; cursor: pointer; font-size: 14px; }
+.sust-sesiones input[type="checkbox"] { width: 20px; height: 20px; accent-color: #ea580c; }
+.sust-tipos { display: flex; flex-wrap: wrap; gap: 8px; }
+.sust-tipos button { min-height: 44px; padding: 0 14px; border-radius: 12px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.sust-tipo-on { outline: 3px solid #1c1917; outline-offset: 1px; }
+.sust-seccion { margin-top: 18px; }
+.sust-seccion h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; }
+/* Aviso que recibe el profesor en «Hoy» */
+.sust-aviso { background: #1d4ed8; color: #fff; border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px; }
+.sust-aviso h3 { margin: 0; font-size: 13px; letter-spacing: 1px; font-weight: 800; }
+.sust-aviso-item { background: rgba(255, 255, 255, .13); border-radius: 12px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.sust-aviso-item strong { font-size: 17px; }
+.sust-aviso-item p { margin: 2px 0 0; font-size: 14px; opacity: .95; }
+.sust-aviso button { min-height: 44px; padding: 0 14px; border-radius: 10px; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; border: 1px solid #fff; }
+.sust-aviso .sust-b1 { background: #fff; color: #1d4ed8; }
+.sust-aviso .sust-b2 { background: transparent; color: #fff; }
+@media (max-width: 640px) { .sust-barra { grid-template-columns: 100px minmax(0, 1fr) 32px; } }

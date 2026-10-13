@@ -9,6 +9,9 @@ import AgendaEmbed from "./components/AgendaEmbed";
 import EquipoPage from "./pages/EquipoPage";
 import PerfilPage from "./pages/PerfilPage";
 import AdminPage from "./pages/AdminPage";
+import SustitucionesPage from "./pages/SustitucionesPage";
+import SustAvisos from "./components/SustAvisos";
+import { misEtapasSust } from "./lib/sustituciones";
 import Modal from "./components/Modal";
 import { miPerfil } from "./lib/equipo";
 import Sidebar from "./components/Sidebar";
@@ -705,6 +708,8 @@ export default function App() {
   const [agendaModal, setAgendaModal] = useState(false);
   const [agendaUsada, setAgendaUsada] = useState(false); // la Agenda se carga la primera vez que se abre
   const [esAdmin, setEsAdmin] = useState(false);
+  const [sustEtapas, setSustEtapas] = useState([]); // etapas que gestiona (equipo directivo)
+  const [centro, setCentro] = useState("");
   const [avisoLimite, setAvisoLimite] = useState(null);
   useEffect(() => {
     const f = (e) => setAvisoLimite(e.detail || {});
@@ -725,7 +730,8 @@ export default function App() {
     if (!session) return;
     cargarClases();
     iniciarAgenda();
-    miPerfil().then(p => setEsAdmin(p?.rol === "admin")).catch(() => {});
+    miPerfil().then(p => { setEsAdmin(p?.rol === "admin"); setCentro(p?.centro || ""); }).catch(() => {});
+    misEtapasSust().then(setSustEtapas).catch(() => {});
     // Enlace directo a un documento (?doc=...), p. ej. desde la Agenda docente
     const docParam = new URLSearchParams(window.location.search).get("doc");
     if (docParam) { setDocId(docParam); setView("doc"); window.history.replaceState({}, "", window.location.pathname); }
@@ -758,18 +764,20 @@ export default function App() {
       <Navbar session={session} view={view} onGoLibrary={()=>ir("library")} onGoNew={()=>nuevoDocumento()}/>
       <div className="crm-layout">
         <Sidebar
-          view={view} seccion={params.seccion} clases={clases} claseActivaId={params.claseId} onNuevo={()=>nuevoDocumento()} esAdmin={esAdmin}
+          view={view} seccion={params.seccion} clases={clases} claseActivaId={params.claseId} onNuevo={()=>nuevoDocumento()} esAdmin={esAdmin} esDirectivo={sustEtapas.length>0}
           abierta={menuMovil} onCerrar={()=>setMenuMovil(false)}
           onGo={(v, p)=>ir(v, p)} onNuevaClase={()=>setClaseModal(true)} onConectarAgenda={()=>setAgendaModal(true)}
         />
         <main className={`crm-main ${view==="ag"?"crm-main-agenda":""}`}>
           <button className="doc-btn crm-menu-movil" onClick={()=>setMenuMovil(true)}>☰ Menú</button>
+          {view==="inicio"    &&<SustAvisos email={session?.user?.email} centro={centro}/>}
           {view==="inicio"    &&<HomePage session={session} clases={clases} cargandoClases={cargandoClases} errorClases={errorClases} onAbrirClase={id=>ir("clase",{claseId:id})} onNuevaClase={()=>setClaseModal(true)} onAgenda={()=>ir("agenda")}/>}
           {view==="agenda"    &&<AgendaPage clases={clases} onAbrirDoc={abrirDoc}/>}
           {view==="modelos"   &&<ModelosPage/>}
           {view==="equipo"    &&<EquipoPage clases={clases} onAbrirDoc={abrirDoc}/>}
           {view==="perfil"    &&<PerfilPage/>}
-          {view==="admin" && esAdmin &&<AdminPage/>}
+          {view==="admin" && esAdmin &&<AdminPage onCargos={()=>misEtapasSust().then(setSustEtapas)}/>}
+          {view==="sust" && sustEtapas.length>0 &&<SustitucionesPage etapas={sustEtapas} centro={centro}/>}
           {view==="clase"     &&<ClasePage key={params.claseId} claseId={params.claseId} clases={clases} onClasesChanged={async (nuevaId)=>{ await cargarClases(); if (typeof nuevaId === "string") ir("clase",{claseId:nuevaId}); }} onNuevoDocumento={nuevoDocumento} onAbrirAlumno={(id, cid)=>ir("alumno",{alumnoId:id, claseId:cid})} onAbrirDoc={abrirDoc} onEliminada={()=>{cargarClases();ir("inicio");}}/>}
           {view==="alumno"    &&<AlumnoPage key={params.alumnoId} alumnoId={params.alumnoId} claseId={params.claseId} clases={clases} onVolverClase={id=>ir("clase",{claseId:id})} onNuevoDocumento={nuevoDocumento} onAbrirDoc={abrirDoc}/>}
           {view==="library"   &&<div className="container"><LibraryPage onOpen={abrirDoc} onNew={()=>nuevoDocumento()}/></div>}
