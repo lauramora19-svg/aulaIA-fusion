@@ -5,7 +5,7 @@ import { supabase } from "./supabase";
 const fetchOriginal = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = typeof input === "string" ? input : input?.url || "";
-  if (!url.includes("/api/generar")) return fetchOriginal(input, init);
+  if (!url.includes("/api/generar") && !url.includes("/api/sust-")) return fetchOriginal(input, init);
   if (init && typeof init.body === "string") {
     try {
       const b = JSON.parse(init.body);
@@ -17,6 +17,7 @@ window.fetch = async (input, init = {}) => {
     } catch { /* cuerpo no JSON: se envía tal cual */ }
   }
   const res = await fetchOriginal(input, init);
+  if (!url.includes("/api/generar")) return res;
   if (res.status === 429 || res.status === 401) {
     const info = await res.clone().json().catch(() => ({}));
     window.dispatchEvent(new CustomEvent("aulaia-limite", { detail: { ...info, status: res.status } }));
