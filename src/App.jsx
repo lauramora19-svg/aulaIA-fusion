@@ -28,7 +28,7 @@ import { COMUNIDADES, ETAPAS, CURSOS, AREAS, NECESIDADES } from "./lib/datos";
 import { leerStreamSSE } from "./lib/stream";
 import { exportarWordContenido } from "./lib/word";
 import { renderResultado } from "./lib/render";
-import { listarEspecialistas, resumenGrupo, tokenActual } from "./lib/equipo";
+import { listarEspecialistas, resumenGrupo, tokenActual, contextoEncargo } from "./lib/equipo";
 import "./App.css";
 import "./crm.css";
 
@@ -350,7 +350,7 @@ function Generator({ onSaved, contexto }) {
   useEffect(() => { listarEspecialistas(false).then(setEspecialistas).catch(() => {}); }, []);
   const espDeTipo = (t) => especialistas.find(e => (e.tipos || []).includes(t));
   // Datos para que el especialista del equipo trabaje con tu perfil y tu grupo
-  const extraEquipo = async () => ({ accessToken: await tokenActual(), grupoTexto: await resumenGrupo(ctxClase, ctxAlumno).catch(() => "") });
+  const extraEquipo = async () => ({ accessToken: await tokenActual(), grupoTexto: await resumenGrupo(ctxClase, ctxAlumno).catch(() => ""), contextoEncargo: await contextoEncargo(ctxClase, ctxAlumno).catch(() => "") });
 
   const toggle = (list, setList, id) => setList(p => p.includes(id)?p.filter(x=>x!==id):[...p,id]);
   const needsDuracion = TIPOS_CON_DURACION.includes(tipoResultado);
@@ -614,7 +614,7 @@ function Generator({ onSaved, contexto }) {
     <div className="container">
       <header className="header">
         <div className="badge">IA para Educación Inclusiva</div>
-        <h1 className="title">Programaciones adaptadas<br/><span className="title-accent">con Inteligencia Artificial</span></h1>
+        <h1 className="title">Crear <span className="title-accent">con IA</span></h1>
         <p className="subtitle">Selecciona las características de tu aula y obtén recursos listos para usar en segundos.</p>
       </header>
       {ctxClase && (
