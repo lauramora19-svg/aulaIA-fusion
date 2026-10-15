@@ -259,12 +259,12 @@ class AppController {
 
     // Page Heading text
     const headings = {
-      'horario': 'Programación Semanal & Pipeline',
-      'anual': 'Vista Anual (12 Meses, Festivos y Objetivos)',
-      'clases': 'Mis Clases & Plano de Aula',
-      'alumnado': 'Fichas de Alumnado & Atención NEAE',
-      'listados': 'Listado del Grupo',
-      'mensajes': 'Banco de Mensajes a Familias',
+      'horario': 'Horario semanal',
+      'anual': 'Vista anual',
+      'clases': 'Plano de aula',
+      'alumnado': 'Alumnado y NEAE',
+      'listados': 'Listados del grupo',
+      'mensajes': 'Mensajes a familias',
       'sustitucion': 'Carpeta de Sustitución'
     };
     const titleEl = document.getElementById('page-title-heading');
