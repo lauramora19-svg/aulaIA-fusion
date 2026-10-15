@@ -741,7 +741,7 @@ export default function App() {
   }, [session?.user?.id]);
 
   // Alumnado y grupos de la Agenda y de AulaIA, siempre al día (solo añade, nunca borra)
-  useEffect(() => { if (session) pedirSincronizacion(true); }, [session?.user?.id, view, params.claseId]);
+  useEffect(() => { if (session) pedirSincronizacion(true); }, [session?.user?.id, view, params.claseId, params.seccion]);
   const ir = (v, p = {}) => { if (v === "ag") setAgendaUsada(true); setView(v); setParams(p); window.scrollTo(0, 0); };
   useEffect(() => { window.__aulaiaSignOut = () => supabase.auth.signOut(); }, []);
   useEffect(() => {
