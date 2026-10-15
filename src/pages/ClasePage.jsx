@@ -25,6 +25,7 @@ export default function ClasePage({ claseId, clases, onClasesChanged, onNuevoDoc
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);
+  const [contextoGrupo, setContextoGrupo] = useState("");
   const [menu, setMenu] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState("");
   const [buscar, setBuscar] = useState("");
@@ -44,6 +45,10 @@ export default function ClasePage({ claseId, clases, onClasesChanged, onNuevoDoc
   }, [claseId, clases]);
 
   useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    if (modal || !clase?.grupo_id) return;
+    supabase.from("grupos").select("contexto").eq("id", clase.grupo_id).maybeSingle().then(({ data }) => setContextoGrupo(data?.contexto || ""));
+  }, [clase?.grupo_id, modal]);
   useEffect(() => {
     const f = () => cargar();
     window.addEventListener("aulaia-agenda-sync", f);
@@ -128,6 +133,11 @@ export default function ClasePage({ claseId, clases, onClasesChanged, onNuevoDoc
             <span><i className="crm-dot" style={{ background: "#f59e0b" }} />{nee} con NEE</span>
             <span><i className="crm-dot" style={{ background: "#6366f1" }} />{docs.length} documentos</span>
           </div>
+          <p className="crm-muted" style={{ margin: "10px 0 0", maxWidth: 640 }}>
+            {contextoGrupo
+              ? <>📝 <strong>Contexto del grupo:</strong> {contextoGrupo.length > 200 ? contextoGrupo.slice(0, 200) + "…" : contextoGrupo} <button className="btn-back-sm" onClick={() => setModal("editar")}>Editar</button></>
+              : <button className="btn-back-sm" onClick={() => setModal("editar")}>📝 Añade el contexto del grupo para que la IA lo tenga en cuenta</button>}
+          </p>
         </div>
         <div className="crm-header-actions">
           <button className="library-new-btn" onClick={() => onNuevoDocumento(clase, null)}>✨ Nuevo documento</button>
