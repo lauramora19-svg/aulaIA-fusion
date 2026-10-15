@@ -22,7 +22,7 @@ import AlumnoPage from "./pages/AlumnoPage";
 import AgendaPage from "./pages/AgendaPage";
 import ModelosPage from "./pages/ModelosPage";
 import AgendaConexionModal from "./components/AgendaConexionModal";
-import { iniciarAgenda } from "./lib/agenda";
+import { iniciarAgenda, pedirSincronizacion } from "./lib/agenda";
 import { mensajeError } from "./lib/crm";
 import { COMUNIDADES, ETAPAS, CURSOS, AREAS, NECESIDADES } from "./lib/datos";
 import { leerStreamSSE } from "./lib/stream";
@@ -740,6 +740,8 @@ export default function App() {
     return () => window.removeEventListener("aulaia-agenda-sync", f);
   }, [session?.user?.id]);
 
+  // Alumnado y grupos de la Agenda y de AulaIA, siempre al día (solo añade, nunca borra)
+  useEffect(() => { if (session) pedirSincronizacion(true); }, [session?.user?.id, view, params.claseId]);
   const ir = (v, p = {}) => { if (v === "ag") setAgendaUsada(true); setView(v); setParams(p); window.scrollTo(0, 0); };
   useEffect(() => { window.__aulaiaSignOut = () => supabase.auth.signOut(); }, []);
   useEffect(() => {
