@@ -188,6 +188,10 @@ export async function quitarDeAgenda(ref) {
 const norm = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.,]/g, " ").replace(/\s+/g, " ").trim();
 const normG = (s) => norm(s).replace(/\s/g, ""); // "1º A" = "1ºA"
 const IGNORADOS_KEY = "aulaia-agenda-ignorados";
+// «4º ESO A» → eso · «1º Bach» → bach · «3 años» / «Infantil» → infantil · resto → primaria
+const etapaDeEtiqueta = (l) => { const t = norm(l); return /\beso\b/.test(t) ? "eso" : /bach/.test(t) ? "bach" : /infantil|anos/.test(t) ? "infantil" : /\bfp\b/.test(t) ? "fp" : "primaria"; };
+// Usa en la Agenda la misma forma de escribir el grupo que ya tenga («1ºA» o «1º A»)
+const etiquetaEnAgenda = (st, label) => ((st.classes || []).find(c => normG(c.groupLabel) === normG(label)) || {}).groupLabel || label;
 const leerIgnorados = () => { try { return new Set(JSON.parse(localStorage.getItem(IGNORADOS_KEY) || "[]")); } catch { return new Set(); } };
 const guardarIgnorados = (set) => { try { localStorage.setItem(IGNORADOS_KEY, JSON.stringify([...set])); } catch {} };
 // Diferencias que la docente ya decidió dejar como están (no se vuelven a preguntar mientras no cambien)
@@ -318,7 +322,7 @@ export async function aplicarSincronizacion(plan, d) {
     const asegurarGrupo = async (label) => {
       let g = grupos.find(x => normG(x.nombre) === normG(label || "Sin grupo"));
       if (!g) {
-        const { data, error } = await supabase.from("grupos").insert({ nombre: (label || "Sin grupo").trim(), etapa: "primaria" }).select().single();
+        const { data, error } = await supabase.from("grupos").insert({ nombre: (label || "Sin grupo").trim(), etapa: etapaDeEtiqueta(label) }).select().single();
         if (error) throw error;
         g = data; grupos.push(g);
       }
@@ -386,9 +390,9 @@ export async function aplicarSincronizacion(plan, d) {
     if (clasesEnviar.length || alumnosEnviar.length || camposAula.length) {
       await modificarAgenda((st) => { // idempotente: se puede repetir sin duplicar
         st.students = st.students || []; st.classes = st.classes || [];
-        clasesEnviar.forEach(c => { if (!st.classes.some(x => x.id === c.id)) st.classes.push({ id: c.id, groupLabel: c.groupLabel, subject: c.subject }); });
+        clasesEnviar.forEach(c => { if (!st.classes.some(x => x.id === c.id)) st.classes.push({ id: c.id, groupLabel: etiquetaEnAgenda(st, c.groupLabel), subject: c.subject }); });
         alumnosEnviar.forEach(({ id, n }) => {
-          if (!st.students.some(x => x.id === id)) st.students.push({ id, name: n.nombre, group: n.grupo, neae: n.neae, neaeType: n.tipo, birthday: "", behavior: "", notes: "", parentName: "", parentEmail: "", phones: [], gradeAvg: null });
+          if (!st.students.some(x => x.id === id)) st.students.push({ id, name: n.nombre, group: etiquetaEnAgenda(st, n.grupo), neae: n.neae, neaeType: n.tipo, birthday: "", behavior: "", notes: "", parentName: "", parentEmail: "", phones: [], gradeAvg: null });
         });
         camposAula.forEach(c => {
           const s = st.students.find(x => x.id === c.studentId); if (!s) return;
@@ -431,6 +435,8 @@ export async function sincronizarAuto() {
         supabase.from("clases").select("id, agenda_class_id"),
       ]);
       const gruposAula = new Set((rg.data || []).map(g => normG(g.nombre)));
+      // Las clases nuevas de la Agenda se crean también en AulaIA (con su grupo)
+      plan.clasesNuevasAgenda.filter(c => !c.parejaId && c.grupo).forEach(c => gruposAula.add(normG(c.grupo)));
       const nuncaEnviados = new Set((ra.data || []).filter(a => !a.agenda_student_id && !a.agenda_off).map(a => a.id));
       const clasesSinVinculo = new Set((rc.data || []).filter(c => !c.agenda_class_id).map(c => c.id));
       const d = { agenda: {}, aula: {}, dif: {}, clasesAgenda: {}, clasesAula: {} };
@@ -441,16 +447,51 @@ export async function sincronizarAuto() {
       });
       const nuevosAula = plan.nuevosAula.filter(n => nuncaEnviados.has(n.alumnoId));
       nuevosAula.forEach(n => { d.aula[n.alumnoId] = "enviar"; });
-      const clasesNuevasAgenda = plan.clasesNuevasAgenda.filter(c => c.parejaId);
-      clasesNuevasAgenda.forEach(c => { d.clasesAgenda[c.classId] = "emparejar"; });
+      const clasesNuevasAgenda = plan.clasesNuevasAgenda.filter(c => c.parejaId || c.grupo);
+      clasesNuevasAgenda.forEach(c => { d.clasesAgenda[c.classId] = c.parejaId ? "emparejar" : "crear"; });
       const clasesNuevasAula = plan.clasesNuevasAula.filter(c => clasesSinVinculo.has(c.claseId));
       clasesNuevasAula.forEach(c => { d.clasesAula[c.claseId] = "enviar"; });
-      if (!nuevosAgenda.length && !nuevosAula.length && !clasesNuevasAgenda.length && !clasesNuevasAula.length) return null;
-      return await aplicarSincronizacion({ nuevosAgenda, nuevosAula, diferencias: [], desaparecidos: [], clasesNuevasAgenda, clasesNuevasAula }, d);
+      let r = null;
+      if (nuevosAgenda.length || nuevosAula.length || clasesNuevasAgenda.length || clasesNuevasAula.length)
+        r = await aplicarSincronizacion({ nuevosAgenda, nuevosAula, diferencias: [], desaparecidos: [], clasesNuevasAgenda, clasesNuevasAula }, d);
+      if (await quitarBorradosEnAgenda()) window.dispatchEvent(new CustomEvent("aulaia-agenda-sync", { detail: {} }));
+      if (r) refrescarAgendaAbierta();
+      return r;
     } catch (e) { console.error("Sincronización automática:", e); return null; }
     finally { ultimaAuto = Date.now(); }
   })();
   try { return await autoEnCurso; } finally { autoEnCurso = null; }
+}
+// Lo que se borró en la Agenda se quita también de AulaIA, pero con cuidado:
+//  · solo alumnado/asignaturas SIN documentos ni seguimiento (lo demás se queda y
+//    aparece en «⚙️ Mi Agenda» para que decida la docente);
+//  · como mucho 3 de una vez, y nunca si la Agenda aparece vacía (podría ser un fallo de carga).
+async function quitarBorradosEnAgenda() {
+  const st = (await leerAgenda()) || {};
+  const idsAl = new Set((st.students || []).map(s => s.id)), idsCl = new Set((st.classes || []).map(c => c.id));
+  if (!idsAl.size && !idsCl.size) return false;
+  const [ra, rc] = await Promise.all([
+    supabase.from("alumnos").select("id, agenda_student_id").not("agenda_student_id", "is", null),
+    supabase.from("clases").select("id, agenda_class_id").not("agenda_class_id", "is", null),
+  ]);
+  const alumnosFuera = (ra.data || []).filter(a => !idsAl.has(a.agenda_student_id));
+  const clasesFuera = (rc.data || []).filter(c => !idsCl.has(c.agenda_class_id));
+  if (alumnosFuera.length + clasesFuera.length === 0 || alumnosFuera.length > 3 || clasesFuera.length > 3) return false;
+  let quitados = 0;
+  for (const a of alumnosFuera) {
+    const [p, sg] = await Promise.all([
+      supabase.from("programaciones").select("id").eq("alumno_id", a.id).limit(1),
+      supabase.from("seguimiento").select("id").eq("alumno_id", a.id).limit(1),
+    ]);
+    if ((p.data || []).length || (sg.data || []).length) continue;
+    if (!(await supabase.from("alumnos").delete().eq("id", a.id)).error) quitados++;
+  }
+  for (const c of clasesFuera) {
+    const p = await supabase.from("programaciones").select("id").eq("clase_id", c.id).limit(1);
+    if ((p.data || []).length) continue;
+    if (!(await supabase.from("clases").delete().eq("id", c.id)).error) quitados++;
+  }
+  return quitados > 0;
 }
 // Se llama al crear clases o alumnos (inmediata) y al moverse por la app (como mucho cada 20 s)
 export const pedirSincronizacion = (soloSiToca = false) => {
@@ -458,9 +499,29 @@ export const pedirSincronizacion = (soloSiToca = false) => {
   clearTimeout(autoTimer);
   autoTimer = setTimeout(() => { sincronizarAuto(); }, soloSiToca ? 0 : 400);
 };
-export async function borrarAlumnoEnAgenda() {}
-export async function borrarClaseEnAgenda() {}
-export async function borrarGrupoEnAgenda() {}
+// Borrar en AulaIA → se borra también en la Agenda (con copia de seguridad antes)
+const refrescarAgendaAbierta = () => { try { document.querySelector(".agenda-embed-frame")?.contentWindow?.__agendaRefrescar?.(); } catch {} };
+async function borrarEnAgenda(classIds, studentIds) {
+  const cs = new Set(classIds.filter(Boolean)), ss = new Set(studentIds.filter(Boolean));
+  if (!cs.size && !ss.size) return;
+  const ign = leerIgnorados(); [...cs, ...ss].forEach(i => ign.add(i)); guardarIgnorados(ign);
+  await copiaDeSeguridad("Antes de borrar desde AulaIA");
+  await modificarAgenda((st) => {
+    const antes = (st.classes || []).length + (st.students || []).length;
+    st.classes = (st.classes || []).filter(c => !cs.has(c.id));
+    st.students = (st.students || []).filter(s => !ss.has(s.id));
+    Object.keys(st.seatingByClass || {}).forEach(k => {
+      if (cs.has(k)) delete st.seatingByClass[k];
+      else ((st.seatingByClass[k] || {}).seats || []).forEach(seat => { if (ss.has(seat.studentId)) seat.studentId = null; });
+    });
+    if (cs.has(st.selectedClassId)) st.selectedClassId = st.classes[0]?.id || null;
+    if (antes === st.classes.length + st.students.length) return false;
+  });
+  refrescarAgendaAbierta();
+}
+export async function borrarAlumnoEnAgenda(studentId) { await borrarEnAgenda([], [studentId]); }
+export async function borrarClaseEnAgenda(classId) { await borrarEnAgenda([classId], []); }
+export async function borrarGrupoEnAgenda(classIds = [], studentIds = []) { await borrarEnAgenda(classIds, studentIds); }
 export const olvidarIgnorados = () => { try { localStorage.removeItem(IGNORADOS_KEY); } catch {} };
 
 // ── Traer (COPIAR) mis datos de la Agenda antigua ──────────────────────────
