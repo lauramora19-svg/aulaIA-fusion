@@ -256,7 +256,7 @@ export async function analizarSincronizacion() {
     if (propuesta) usadosAula.add(propuesta.id);
     nuevosAgenda.push({
       studentId: s.id, nombre: s.name || "(sin nombre)", grupo: s.group || "", neae: !!s.neae, tipo: s.neaeType || "",
-      propuestaId: propuesta?.id || null,
+      propuestaId: propuesta?.id || null, dudoso: !propuesta && candidatos.length > 0,
       opciones: alumnos.filter(a => !(a.agenda_student_id && idsAgenda.has(a.agenda_student_id)) && normG(grupoDe(a.grupo_id)?.nombre) === normG(s.group))
         .map(a => ({ id: a.id, nombre: nombreCompleto(a) })),
     });
@@ -411,8 +411,53 @@ export async function aplicarSincronizacion(plan, d) {
   }
 }
 
-// Compatibilidad: ya no se sincroniza sola ni se borra nada en la Agenda.
-export const pedirSincronizacion = () => {};
+// ── Sincronización AUTOMÁTICA (solo lo seguro, nunca borra) ─────────────────
+//  · Alumnado de la Agenda cuyo grupo ya existe en AulaIA → entra en ese grupo
+//    (si ya estaba con un nombre compatible, solo se vinculan).
+//  · Alumnado y clases creados en AulaIA que nunca se enviaron → se añaden a la Agenda.
+//  · Lo dudoso (dos alumnos parecidos, grupos que no existen, diferencias de
+//    datos) se deja para «⚙️ Mi Agenda → Sincronizar», donde decide la docente.
+let autoEnCurso = null, ultimaAuto = 0, autoTimer = null;
+export async function sincronizarAuto() {
+  if (autoEnCurso) return autoEnCurso;
+  autoEnCurso = (async () => {
+    try {
+      const u = await agendaUsuario();
+      if (!u) return null;
+      const plan = await analizarSincronizacion();
+      const [rg, ra, rc] = await Promise.all([
+        supabase.from("grupos").select("id, nombre"),
+        supabase.from("alumnos").select("id, agenda_student_id, agenda_off"),
+        supabase.from("clases").select("id, agenda_class_id"),
+      ]);
+      const gruposAula = new Set((rg.data || []).map(g => normG(g.nombre)));
+      const nuncaEnviados = new Set((ra.data || []).filter(a => !a.agenda_student_id && !a.agenda_off).map(a => a.id));
+      const clasesSinVinculo = new Set((rc.data || []).filter(c => !c.agenda_class_id).map(c => c.id));
+      const d = { agenda: {}, aula: {}, dif: {}, clasesAgenda: {}, clasesAula: {} };
+      const nuevosAgenda = plan.nuevosAgenda.filter(n => {
+        if (n.propuestaId) { d.agenda[n.studentId] = { accion: "emparejar", alumnoId: n.propuestaId }; return true; }
+        if (!n.dudoso && n.grupo && gruposAula.has(normG(n.grupo))) { d.agenda[n.studentId] = { accion: "crear" }; return true; }
+        return false;
+      });
+      const nuevosAula = plan.nuevosAula.filter(n => nuncaEnviados.has(n.alumnoId));
+      nuevosAula.forEach(n => { d.aula[n.alumnoId] = "enviar"; });
+      const clasesNuevasAgenda = plan.clasesNuevasAgenda.filter(c => c.parejaId);
+      clasesNuevasAgenda.forEach(c => { d.clasesAgenda[c.classId] = "emparejar"; });
+      const clasesNuevasAula = plan.clasesNuevasAula.filter(c => clasesSinVinculo.has(c.claseId));
+      clasesNuevasAula.forEach(c => { d.clasesAula[c.claseId] = "enviar"; });
+      if (!nuevosAgenda.length && !nuevosAula.length && !clasesNuevasAgenda.length && !clasesNuevasAula.length) return null;
+      return await aplicarSincronizacion({ nuevosAgenda, nuevosAula, diferencias: [], desaparecidos: [], clasesNuevasAgenda, clasesNuevasAula }, d);
+    } catch (e) { console.error("Sincronización automática:", e); return null; }
+    finally { ultimaAuto = Date.now(); }
+  })();
+  try { return await autoEnCurso; } finally { autoEnCurso = null; }
+}
+// Se llama al crear clases o alumnos (inmediata) y al moverse por la app (como mucho cada 20 s)
+export const pedirSincronizacion = (soloSiToca = false) => {
+  if (soloSiToca && Date.now() - ultimaAuto < 20000) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(() => { sincronizarAuto(); }, soloSiToca ? 0 : 400);
+};
 export async function borrarAlumnoEnAgenda() {}
 export async function borrarClaseEnAgenda() {}
 export async function borrarGrupoEnAgenda() {}
