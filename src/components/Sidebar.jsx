@@ -17,7 +17,7 @@ export default function Sidebar({ esAdmin, esDirectivo, view, seccion, clases, c
       <aside className={`crm-side ${abierta ? "crm-side-open" : ""}`}>
         <p className="crm-side-title">Mi día</p>
         <nav className="crm-side-nav">
-          {item("inicio", "🏠", "Hoy")}
+          {item("inicio", "🏠", "Inicio")}
           {ag("horario", "🗓️", "Horario semanal")}
           {ag("anual", "📆", "Vista anual")}
           {item("agenda", "📅", "Calendario")}
@@ -51,7 +51,7 @@ export default function Sidebar({ esAdmin, esDirectivo, view, seccion, clases, c
         <nav className="crm-side-nav">
           {item("equipo", "🧑‍🏫", "Equipo docente IA")}
           {item("generator", "✨", "Crear con IA", {}, onNuevo)}
-          {item("library", "📂", "Mis documentos")}
+          {item("library", "📂", "Mi biblioteca")}
           {item("modelos", "📋", "Modelos del colegio")}
         </nav>
 

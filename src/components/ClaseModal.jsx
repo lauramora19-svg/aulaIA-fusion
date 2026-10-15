@@ -20,14 +20,19 @@ export default function ClaseModal({ clase, grupoFijo, onClose, onSaved }) {
   const [area, setArea] = useState(clase?.area || "");
   const [comunidad, setComunidad] = useState(clase?.comunidad || grupoFijo?.comunidad || "Madrid");
   const [color, setColor] = useState(clase?.color || COLORES[0]);
+  const [contexto, setContexto] = useState("");
+  useEffect(() => {
+    const gid = clase?.grupo_id || grupoFijo?.id;
+    if (gid) supabase.from("grupos").select("contexto").eq("id", gid).maybeSingle().then(({ data }) => setContexto(data?.contexto || ""));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
   const elegirGrupo = (id) => {
     setGrupoId(id);
     const g = grupos.find(x => x.id === id);
-    if (g) { setNombre(g.nombre); if (g.etapa) setEtapa(g.etapa); setCurso(g.curso || ""); if (g.comunidad) setComunidad(g.comunidad); }
-    else setNombre("");
+    if (g) { setNombre(g.nombre); if (g.etapa) setEtapa(g.etapa); setCurso(g.curso || ""); if (g.comunidad) setComunidad(g.comunidad); setContexto(g.contexto || ""); }
+    else { setNombre(""); setContexto(""); }
   };
 
   const guardar = async () => {
@@ -36,7 +41,7 @@ export default function ClaseModal({ clase, grupoFijo, onClose, onSaved }) {
     setGuardando(true); setError("");
     // 1. Grupo (se crea si es nuevo; si existe, se actualizan sus datos)
     let gid = grupoId;
-    const filaGrupo = { nombre: nombre.trim(), etapa, curso: curso || null, comunidad };
+    const filaGrupo = { nombre: nombre.trim(), etapa, curso: curso || null, comunidad, contexto: contexto.trim() };
     if (gid === "nuevo") {
       const { data, error } = await supabase.from("grupos").insert(filaGrupo).select().single();
       if (error) { setGuardando(false); setError(mensajeError(error)); return; }
@@ -100,6 +105,10 @@ export default function ClaseModal({ clase, grupoFijo, onClose, onSaved }) {
           <select className="input-tema" value={comunidad} onChange={e => setComunidad(e.target.value)}>
             {COMUNIDADES.map(c => <option key={c}>{c}</option>)}
           </select>
+        </Campo>
+        <Campo label="Contexto del grupo (para la IA)" hint="Se usa en todo lo que generes para este grupo, en todas sus asignaturas. 🔒 Sin nombres de alumnos.">
+          <textarea className="textarea" rows={4} value={contexto} onChange={e => setContexto(e.target.value)} maxLength={2000}
+            placeholder={"Ej.: 21 alumnos, grupo muy participativo pero con dificultad para el trabajo autónomo. Les motivan los animales y el deporte. Ritmo de lectura heterogéneo. Hay pizarra digital y 6 tablets. 3 alumnos con NEAE (dislexia y TDAH)."} />
         </Campo>
         <Campo label="Color">
           <div className="crm-colores">

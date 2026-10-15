@@ -23,7 +23,7 @@ export default function Navbar({ session, view, onGoLibrary, onGoNew }) {
           <button
             className={`navbar-link ${view === "library" ? "navbar-link-active" : ""}`}
             onClick={onGoLibrary}
-          >📂 Mis programaciones</button>
+          >📂 Mi biblioteca</button>
 
           <button
             className={`navbar-new ${view === "generator" ? "navbar-new-active" : ""}`}
