@@ -14,7 +14,7 @@ export default async function handler(req) {
     tipoResultado, comentario, idioma = "Castellano",
     metodologias = [], continuarDesde = null,
     plantillaId = null, accessToken = null,
-    especialistaId = null, grupoTexto = "",
+    especialistaId = null, grupoTexto = "", contextoEncargo = "",
   } = await req.json();
 
   // ── CUENTA, LÍMITE MENSUAL Y REGISTRO DE USO ─────────────────────────────
@@ -516,6 +516,10 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
   }
 
   // ── LLAMADA A CLAUDE ──────────────────────────────────────────────────────
+  // Contexto real del grupo y del alumno (si el encargo se hace desde una clase o una ficha)
+  const promptFinal = contextoEncargo && String(contextoEncargo).trim()
+    ? `${prompt}\n\n════════════\nCONTEXTO REAL DEL AULA (tenlo en cuenta para adaptar TODO el documento; no inventes nombres):\n${String(contextoEncargo).slice(0, 4000)}`
+    : prompt;
   const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type":"application/json", "x-api-key":apiKey, "anthropic-version":"2023-06-01" },
@@ -562,7 +566,7 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
 Si no puedes terminar, escribe antes de cortar:
 ---
 ⚠️ Documento incompleto — faltan las siguientes secciones: [lista las secciones]`,
-      messages: [{ role:"user", content: adjuntos.length ? [...adjuntos, { type: "text", text: prompt }] : prompt }],
+      messages: [{ role:"user", content: adjuntos.length ? [...adjuntos, { type: "text", text: promptFinal }] : promptFinal }],
     }),
   });
 
