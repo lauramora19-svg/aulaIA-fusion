@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import { leerStreamSSE } from "./stream";
 import { exportarWordContenido } from "./word";
 import { renderResultado } from "./render";
+import { contextoEncargo } from "./equipo";
 
 export const FIRMA_COMPLETO = "✅ Documento completo generado por AulaIA";
 
@@ -168,6 +169,17 @@ export const GRUPOS_ACCIONES = [
   ["👨‍👩‍👧 Comunicación", ["familias", "plan_alumno"]],
 ];
 
+// Contexto del grupo/alumno al que pertenece el documento (si lo tiene)
+async function contextoDeDoc(doc) {
+  try {
+    const [c, a] = await Promise.all([
+      doc.clase_id ? supabase.from("clases").select("*").eq("id", doc.clase_id).maybeSingle() : Promise.resolve({ data: null }),
+      doc.alumno_id ? supabase.from("alumnos").select("*").eq("id", doc.alumno_id).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    return await contextoEncargo(c.data, a.data);
+  } catch { return ""; }
+}
+
 // Bloque completo de «Generar a partir de…» para un documento ya guardado.
 // Lo que se genera se guarda solo en Mis documentos, enlazado al original.
 export function AccionesSiguientes({ doc, onAbrirDoc }) {
@@ -206,7 +218,7 @@ export function AccionesSiguientes({ doc, onAbrirDoc }) {
     let full = "";
     try {
       const res = await fetch("/api/generar", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...datos, tipoResultado: tipo, promptOverride: prompt }) });
+        body: JSON.stringify({ ...datos, tipoResultado: tipo, promptOverride: prompt, contextoEncargo: await contextoDeDoc(doc) }) });
       if (!res.ok) throw new Error();
       await leerStreamSSE(res, (d) => { full += d; poner(tipo, { texto: full }); });
       await guardar(tipo, full);

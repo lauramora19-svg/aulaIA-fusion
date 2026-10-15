@@ -93,6 +93,40 @@ export async function resumenGrupo(clase, alumno = null) {
   return lineas.join("\n");
 }
 
+// Contexto real para la IA: lo que la docente ha escrito del grupo y el perfil
+// del alumno (solo iniciales; nunca nombres completos).
+export async function contextoEncargo(clase, alumno = null) {
+  if (!clase && !alumno) return "";
+  const partes = [];
+  const grupoId = clase?.grupo_id || alumno?.grupo_id;
+  if (grupoId) {
+    const { data: g } = await supabase.from("grupos").select("nombre, contexto").eq("id", grupoId).maybeSingle();
+    if (g?.contexto?.trim()) partes.push(`CONTEXTO DEL GRUPO ${g.nombre || ""} (escrito por la docente):\n${g.contexto.trim()}`);
+  }
+  if (clase) partes.push(`DATOS DEL GRUPO:\n${await resumenGrupo(clase)}`);
+  if (alumno) {
+    const ini = [alumno.nombre, alumno.apellidos].filter(Boolean).join(" ").split(/\s+/).filter(Boolean).map(p => p[0] + ".").join(" ");
+    const pn = alumno.perfil_nee || {};
+    const nec = (pn.necesidades || []).map(id => NECESIDADES.find(n => n.id === id)?.desc || id);
+    const l = [`- Iniciales: ${ini}`];
+    l.push(alumno.tiene_nee ? `- Presenta NEAE${nec.length ? `: ${nec.join(", ")}` : ""}${pn.tipo_texto ? ` (${pn.tipo_texto})` : ""}` : "- Sin NEAE registradas");
+    if (pn.medidas) l.push(`- Medidas: ${pn.medidas}`);
+    if (pn.apoyos) l.push(`- Apoyos: ${pn.apoyos}`);
+    if (alumno.notas) l.push(`- Notas de la docente: ${alumno.notas}`);
+    // Lo apuntado en la Agenda (pautas/adaptación y conducta)
+    try {
+      if (alumno.agenda_student_id) {
+        const { data: ag } = await supabase.from("agenda_data").select("data").maybeSingle();
+        const s = (ag?.data?.students || []).find(x => x.id === alumno.agenda_student_id);
+        if (s?.notes) l.push(`- Pautas / adaptación (Agenda): ${s.notes}`);
+        if (s?.behavior) l.push(`- Conducta: ${s.behavior}`);
+      }
+    } catch { /* sin Agenda: seguimos */ }
+    partes.push(`ESTE DOCUMENTO ES PARA UN ALUMNO/A CONCRETO:\n${l.join("\n")}`);
+  }
+  return partes.join("\n\n").slice(0, 4000);
+}
+
 export async function tokenActual() {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token || null;
