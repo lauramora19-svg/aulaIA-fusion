@@ -24,7 +24,7 @@ import ModelosPage from "./pages/ModelosPage";
 import AgendaConexionModal from "./components/AgendaConexionModal";
 import { iniciarAgenda, pedirSincronizacion } from "./lib/agenda";
 import { mensajeError } from "./lib/crm";
-import { COMUNIDADES, ETAPAS, CURSOS, AREAS, NECESIDADES } from "./lib/datos";
+import { COMUNIDADES, ETAPAS, CURSOS, AREAS, NECESIDADES, asignaturasDe } from "./lib/datos";
 import { leerStreamSSE } from "./lib/stream";
 import { exportarWordContenido } from "./lib/word";
 import { renderResultado } from "./lib/render";
@@ -110,6 +110,40 @@ const TEMAS_POR_AREA = {
   "Biología": "Ej: la genética mendeliana, la evolución, la inmunología, biotecnología...",
   "Economía": "Ej: oferta y demanda, el mercado laboral, el sistema financiero, macroeconomía...",
   "Arte": "Ej: el Renacimiento, el arte contemporáneo, análisis de obras, arquitectura...",
+  "Lengua Castellana y Literatura": "Ej: el texto argumentativo, la oración compuesta, el Romanticismo, la poesía...",
+  "Lengua Castellana y Literatura I": "Ej: la Edad Media, el Siglo de Oro, la oración compuesta, el comentario de texto...",
+  "Lengua Castellana y Literatura II": "Ej: la Generación del 27, la novela de posguerra, el comentario crítico...",
+  "Francés": "Ej: se présenter, le passé composé, la famille, la ville, les loisirs...",
+  "Historia de España": "Ej: la Restauración, la Segunda República, la Guerra Civil, la Transición...",
+  "Historia de la Filosofía": "Ej: Platón, Descartes, Kant, Nietzsche, la filosofía analítica...",
+  "Historia del Mundo Contemporáneo": "Ej: la Revolución Industrial, las guerras mundiales, la Guerra Fría...",
+  "Geografía": "Ej: el relieve de España, la población, los sectores económicos, el clima...",
+  "Dibujo Técnico I": "Ej: trazados geométricos, tangencias, sistema diédrico, normalización...",
+  "Dibujo Técnico II": "Ej: sistema diédrico avanzado, axonometría, perspectiva cónica...",
+  "Tecnología y Digitalización": "Ej: estructuras, electricidad, programación por bloques, impresión 3D...",
+  "Tecnología e Ingeniería I": "Ej: materiales, máquinas y sistemas mecánicos, electrónica, programación...",
+  "Tecnología e Ingeniería II": "Ej: sistemas automáticos, neumática, electrónica digital, robótica...",
+  "Digitalización": "Ej: seguridad en la red, ofimática avanzada, ciudadanía digital, redes...",
+  "Ciencias de la Computación": "Ej: algoritmos, programación en Python, datos, inteligencia artificial...",
+  "Economía y Emprendimiento": "Ej: el plan de empresa, la idea de negocio, finanzas personales...",
+  "Educación en Valores Cívicos y Éticos": "Ej: la democracia, los derechos humanos, el medio ambiente, la igualdad...",
+  "Educación Plástica, Visual y Audiovisual": "Ej: el color, la composición, el cómic, la fotografía, el diseño...",
+  "Formación y Orientación Personal y Profesional": "Ej: autoconocimiento, itinerarios formativos, el currículum, la entrevista...",
+  "Ámbito Lingüístico y Social": "Ej: el texto expositivo, la Edad Moderna, comprensión lectora, el relieve...",
+  "Ámbito Sociolingüístico": "Ej: la narración, la Prehistoria, el sustantivo, los continentes...",
+  "Ámbito Científico-Tecnológico": "Ej: las fracciones, la materia, ecuaciones, los ecosistemas...",
+  "Biología, Geología y Ciencias Ambientales": "Ej: la célula, la tectónica de placas, los ecosistemas, la biodiversidad...",
+  "Geología y Ciencias Ambientales": "Ej: los riesgos geológicos, los recursos naturales, el cambio climático...",
+  "Anatomía y Fisiología Humanas": "Ej: el aparato locomotor, el sistema cardiovascular, la nutrición...",
+  "Latín": "Ej: las declinaciones, el mundo romano, la mitología, etimologías...",
+  "Cultura Clásica": "Ej: la mitología griega, la vida en Roma, el legado clásico...",
+  "Deporte": "Ej: deportes de equipo, el reglamento, el juego limpio, la condición física...",
+  "Proyecto": "Ej: investigación científica, patrimonio cultural, emprendimiento...",
+  "Matemáticas I": "Ej: trigonometría, números complejos, funciones, límites, vectores...",
+  "Matemáticas II": "Ej: matrices, derivadas, integrales, geometría en el espacio, probabilidad...",
+  "Matemáticas Aplicadas a las Ciencias Sociales I": "Ej: funciones, estadística bidimensional, probabilidad, matemática financiera...",
+  "Matemáticas Aplicadas a las Ciencias Sociales II": "Ej: matrices, programación lineal, derivadas, inferencia estadística...",
+  "Empresa y Diseño de Modelos de Negocio": "Ej: el modelo Canvas, la función financiera, el marketing, la empresa...",
 };
 
 const MODOS = [
@@ -635,8 +669,8 @@ function Generator({ onSaved, contexto }) {
       {step===2&&(
         <div className="form">
           <section className="card"><StepHeader n="05" title="Etapa educativa"/><div className="chips-grid">{ETAPAS.map(e=><Chip key={e.id} label={e.label} emoji={e.emoji} desc={e.rango} selected={etapa===e.id} onClick={()=>{setEtapa(e.id);setCurso("");setArea("");}}/>)}</div></section>
-          {etapa&&<section className="card"><StepHeader n="06" title="Curso"/><div className="chips-grid">{CURSOS[etapa].map(c=><Chip key={c} label={c} selected={curso===c} onClick={()=>setCurso(c)} small/>)}</div></section>}
-          {etapa&&<section className="card"><StepHeader n="07" title="Área o asignatura"/><div className="chips-grid">{AREAS[etapa].map(a=><Chip key={a} label={a} selected={area===a} onClick={()=>{setArea(a);setTema("");}} small/>)}</div></section>}
+          {etapa&&<section className="card"><StepHeader n="06" title="Curso"/><div className="chips-grid">{CURSOS[etapa].map(c=><Chip key={c} label={c} selected={curso===c} onClick={()=>{setCurso(c);if(area&&!asignaturasDe(etapa,c).includes(area))setArea("");}} small/>)}</div></section>}
+          {etapa&&<section className="card"><StepHeader n="07" title="Área o asignatura"/><div className="chips-grid">{asignaturasDe(etapa,curso).map(a=><Chip key={a} label={a} selected={area===a} onClick={()=>{setArea(a);setTema("");}} small/>)}</div></section>}
           {etapa&&area&&(<section className="card"><StepHeader n="08" title="Tema o contenido específico" sub="Opcional pero recomendado"/><input className="input-tema" type="text" placeholder={TEMAS_POR_AREA[area]||"Ej: el tema que estás trabajando..."} value={tema} onChange={e=>setTema(e.target.value)} maxLength={120}/><p className="field-hint">Si lo dejas en blanco la IA elegirá un tema apropiado.</p></section>)}
           <NavBtns onBack={()=>setStep(1)} onNext={()=>setStep(3)} nextDisabled={!canStep2}/>
         </div>
