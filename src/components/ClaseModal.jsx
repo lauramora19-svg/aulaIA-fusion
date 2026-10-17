@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { COMUNIDADES, ETAPAS, CURSOS, AREAS } from "../lib/datos";
+import { COMUNIDADES, ETAPAS, CURSOS, AREAS, asignaturasDe } from "../lib/datos";
 import { mensajeError } from "../lib/crm";
 import { pedirSincronizacion } from "../lib/agenda";
 import Modal from "./Modal";
@@ -89,7 +89,7 @@ export default function ClaseModal({ clase, grupoFijo, onClose, onSaved }) {
         </Campo>
         <div className="crm-form-row">
           <Campo label="Curso">
-            <select className="input-tema" value={curso} onChange={e => setCurso(e.target.value)}>
+            <select className="input-tema" value={curso} onChange={e => { const c = e.target.value; setCurso(c); if (area && !asignaturasDe(etapa, c).includes(area)) setArea(""); }}>
               <option value="">— Elige —</option>
               {(CURSOS[etapa] || []).map(c => <option key={c}>{c}</option>)}
             </select>
@@ -97,7 +97,8 @@ export default function ClaseModal({ clase, grupoFijo, onClose, onSaved }) {
           <Campo label="Área o asignatura">
             <select className="input-tema" value={area} onChange={e => setArea(e.target.value)}>
               <option value="">— Elige —</option>
-              {(AREAS[etapa] || []).map(a => <option key={a}>{a}</option>)}
+              {area && !asignaturasDe(etapa, curso).includes(area) && <option key={area}>{area}</option>}
+              {asignaturasDe(etapa, curso).map(a => <option key={a}>{a}</option>)}
             </select>
           </Campo>
         </div>
