@@ -113,8 +113,27 @@ export default async function handler(req) {
   let contextoCurricular = "";
   let curriculoUsado = false;
 
-  if (supabaseUrl && supabaseKey && !continuarDesde) {
+  if (supabaseUrl && supabaseKey && !continuarDesde && comunidad && area) {
+    // 1º: currículo oficial de esa asignatura y ese curso (criterios, contenidos y competencias)
     try {
+      const r = await fetch(`${supabaseUrl}/rest/v1/rpc/curriculo_para`, {
+        method: "POST",
+        headers: { "Content-Type":"application/json", "apikey":supabaseKey, "Authorization":`Bearer ${supabaseKey}` },
+        body: JSON.stringify({ p_comunidad: comunidad, p_etapa: etapa || "", p_area: area, p_curso: curso || "", p_tema: tema || "", p_max: 15000 }),
+      });
+      if (r.ok) {
+        const frag = await r.json();
+        if (frag?.length > 0) {
+          const decretos = [...new Set(frag.map(f => f.decreto))].join("; ");
+          contextoCurricular = `\n\n════════════\nCURRÍCULO OFICIAL DE ${comunidad.toUpperCase()} — ${area} · ${curso || etapa} (${decretos}).\n` +
+            `Usa SOLO estas competencias específicas, criterios de evaluación (con su numeración exacta, p. ej. 1.2) y contenidos. No inventes criterios ni numeraciones.\n\n` +
+            frag.map(f => f.contenido).join("\n\n");
+          curriculoUsado = true;
+        }
+      }
+    } catch {}
+    // 2º: si no hay nada para ese curso, búsqueda libre en los fragmentos
+    if (!curriculoUsado) try {
       const searchRes = await fetch(`${supabaseUrl}/rest/v1/rpc/buscar_curriculo`, {
         method: "POST",
         headers: { "Content-Type":"application/json", "apikey":supabaseKey, "Authorization":`Bearer ${supabaseKey}` },
@@ -517,9 +536,10 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
 
   // ── LLAMADA A CLAUDE ──────────────────────────────────────────────────────
   // Contexto real del grupo y del alumno (si el encargo se hace desde una clase o una ficha)
+  const promptBase = (contextoCurricular && !prompt.includes(contextoCurricular)) ? `${prompt}${contextoCurricular}` : prompt;
   const promptFinal = contextoEncargo && String(contextoEncargo).trim()
-    ? `${prompt}\n\n════════════\nCONTEXTO REAL DEL AULA (tenlo en cuenta para adaptar TODO el documento; no inventes nombres):\n${String(contextoEncargo).slice(0, 4000)}`
-    : prompt;
+    ? `${promptBase}\n\n════════════\nCONTEXTO REAL DEL AULA (tenlo en cuenta para adaptar TODO el documento; no inventes nombres):\n${String(contextoEncargo).slice(0, 4000)}`
+    : promptBase;
   const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type":"application/json", "x-api-key":apiKey, "anthropic-version":"2023-06-01" },
