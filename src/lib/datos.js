@@ -20,7 +20,7 @@ export const CURSOS = {
   fp:["Grado Básico","Grado Medio","Grado Superior"],
 };
 export const AREAS = {
-  infantil:["Comunicación y representación","Conocimiento del entorno","Identidad y autonomía personal","Religión"],
+  infantil:["Comunicación y representación de la realidad","Crecimiento en armonía","Descubrimiento y exploración del entorno","Religión"],  // nombres del Decreto 36/2022
   primaria:["Lengua y Literatura","Matemáticas","Ciencias Naturales","Ciencias Sociales","Inglés","Educación Física","Música","Plástica","Religión","Tutoría / Habilidades sociales","Autonomía personal"],
   eso:[],  // se rellena abajo con todas las de ASIGNATURAS_CURSO (orden alfabético)
   bach:[],
