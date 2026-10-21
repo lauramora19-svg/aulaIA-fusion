@@ -134,6 +134,15 @@ export async function contextoEncargo(clase, alumno = null) {
       const { data: ev } = await supabase.from("grupo_evaluaciones").select("periodo, resumen, updated_at").eq("grupo_id", grupoId).order("created_at", { ascending: false }).limit(2);
       if (ev?.length) partes.push(`ÚLTIMAS EVALUACIONES DEL GRUPO (tenlas en cuenta: dificultades, acuerdos y propuestas de mejora):\n${ev.map(e => `${e.periodo}:\n${String(e.resumen || "").trim().slice(0, 1500)}`).join("\n\n")}`);
     } catch { /* sin evaluaciones: seguimos */ }
+    // Los últimos informes de análisis de resultados (rúbricas, exámenes) del grupo
+    try {
+      const { data: cl } = await supabase.from("clases").select("id").eq("grupo_id", grupoId);
+      const ids = (cl || []).map(c => c.id);
+      if (ids.length) {
+        const { data: an } = await supabase.from("programaciones").select("titulo, periodo, contenido").in("clase_id", ids).eq("tipo_resultado", "analisis_resultados").order("created_at", { ascending: false }).limit(3);
+        if (an?.length) partes.push(`ÚLTIMOS ANÁLISIS DE RESULTADOS DEL GRUPO:\n${an.map(x => `${x.titulo}:\n${String(x.contenido || "").slice(0, 1200)}`).join("\n\n")}`);
+      }
+    } catch { /* sin análisis: seguimos */ }
   }
   const agenda = await leerAgendaAlumnos();
   if (alumno) {
@@ -145,7 +154,7 @@ export async function contextoEncargo(clase, alumno = null) {
     const conNee = (data || []).filter(a => a.tiene_nee).sort((a, b) => iniciales(a).localeCompare(iniciales(b), "es"));
     if (conNee.length) partes.push(`ALUMNADO CON NEAE DEL GRUPO (incluye adaptaciones concretas para cada uno, citándolos solo por sus iniciales):\n${conNee.map(a => fichaAlumno(a, agenda, false)).join("\n")}`);
   }
-  return partes.join("\n\n").slice(0, 8000);
+  return partes.join("\n\n").slice(0, 10000);
 }
 
 export async function tokenActual() {
@@ -180,4 +189,22 @@ export async function guardarAjustes(a) {
     updated_at: new Date().toISOString(),
   }).eq("id", 1);
   if (error) throw error;
+}
+
+// Lo que hay guardado de una evaluación concreta (resumen + informes de resultados),
+// para rellenar el acta de esa evaluación.
+export async function informesDeEvaluacion(clase, periodos) {
+  if (!clase?.grupo_id) return "";
+  const partes = [];
+  try {
+    const { data: ev } = await supabase.from("grupo_evaluaciones").select("periodo, resumen").eq("grupo_id", clase.grupo_id).in("periodo", periodos);
+    (ev || []).forEach(e => partes.push(`RESUMEN DE LA ${e.periodo.toUpperCase()} (escrito por la docente):\n${e.resumen}`));
+    const { data: cl } = await supabase.from("clases").select("id").eq("grupo_id", clase.grupo_id);
+    const ids = (cl || []).map(c => c.id);
+    if (ids.length) {
+      const { data: an } = await supabase.from("programaciones").select("titulo, contenido").in("clase_id", ids).eq("tipo_resultado", "analisis_resultados").in("periodo", periodos).order("created_at");
+      (an || []).forEach(x => partes.push(`INFORME — ${x.titulo}:\n${String(x.contenido || "").slice(0, 5000)}`));
+    }
+  } catch { /* seguimos sin ellos */ }
+  return partes.join("\n\n").slice(0, 20000);
 }
