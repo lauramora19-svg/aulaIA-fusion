@@ -13,6 +13,7 @@ class AnualEngine {
     const goals = window.store.state.annualGoals || [];
     const contacts = window.store.state.schoolContacts || [];
     const absences = window.store.state.absences || [];
+    absences.forEach((a, i) => { if (a && !a.id) a.id = 'AUS-' + i + '-' + (a.date || ''); });
 
     const completedGoals = goals.filter(g => g.done).length;
     const progressPercent = Math.round((completedGoals / (goals.length || 1)) * 100);
@@ -30,6 +31,10 @@ class AnualEngine {
     const diasLectivos = this.contarDiasLectivos(courseStart, courseEnd, holidays);
     const ed = this.editandoFechas;
     const hEsc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    // Ausencias previstas (las antiguas solo tenían «date»): de la más próxima a la más lejana
+    const fmtDia = (d) => new Date(d + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'long' });
+    const fmtAusencia = (a) => (a.endDate && a.endDate !== a.date) ? `${fmtDia(a.date)} — ${fmtDia(a.endDate)}` : fmtDia(a.date);
+    const absencesOrdenadas = absences.filter(a => a && /^\d{4}-\d{2}-\d{2}$/.test(a.date || '')).slice().sort((x, y) => x.date.localeCompare(y.date));
     const holidaysOrdenados = holidays.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const fmtFestivo = (h) => {
       const f = (x) => { const d = new Date(x + 'T00:00:00'); return isNaN(d) ? x : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }); };
@@ -154,29 +159,37 @@ class AnualEngine {
               </button>
             </div>
 
-            <!-- SUSTITUCIONES Y AUSENCIAS -->
+            <!-- MIS AUSENCIAS PREVISTAS -->
             <div style="background: var(--bg-secondary); border-radius: var(--radius-lg); border: 1px solid var(--border-color); padding: 1.25rem; box-shadow: var(--shadow-sm);">
-              <h4 style="font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
-                <i class="fa-solid fa-user-clock" style="color: var(--accent-primary);"></i> Sustituciones y Ausencias
+              <h4 style="font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+                <i class="fa-solid fa-user-clock" style="color: var(--accent-primary);"></i> Mis ausencias previstas
               </h4>
-              <table style="width: 100%; font-size: 0.84rem; border-collapse: collapse;">
-                <thead>
-                  <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted); text-align: left;">
-                    <th style="padding: 4px 0;">Fecha</th>
-                    <th style="padding: 4px 0;">Tipo</th>
-                    <th style="padding: 4px 0;">Observaciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${absences.map(a => `
-                    <tr style="border-bottom: 1px dashed var(--border-color);">
-                      <td style="padding: 8px 0; font-weight: 600; color: var(--text-primary);">${a.date}</td>
-                      <td style="padding: 8px 0;"><span style="background: var(--accent-light); color: var(--accent-primary); padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.72rem; font-weight: 700;">${a.type}</span></td>
-                      <td style="padding: 8px 0; color: var(--text-secondary); font-size: 0.78rem;">${a.notes}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem;">Apunta los días que vas a faltar (no hace falta poner el motivo) y deja preparada la carpeta para quien te sustituya.</p>
+              <div style="display: flex; flex-direction: column; gap: 0.55rem;">
+                ${absencesOrdenadas.length === 0 ? `<p style="font-size: 0.82rem; color: var(--text-muted);">No tienes ausencias apuntadas.</p>` : ''}
+                ${absencesOrdenadas.map(a => `
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: var(--bg-tertiary); padding: 0.6rem 0.85rem; border-radius: var(--radius-md);">
+                    <div style="min-width: 0;">
+                      <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary);">${fmtAusencia(a)}</div>
+                      ${a.notes ? `<div style="font-size: 0.75rem; color: var(--text-muted);">${hEsc(a.notes)}</div>` : ''}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                      <button onclick="window.anualEngine.prepararCarpeta('${a.id}')" style="border: 1px solid var(--border-color); background: none; color: var(--accent-primary); font-size: 0.74rem; font-weight: 600; padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer;" title="Abrir la carpeta de sustitución para esos días">
+                        <i class="fa-solid fa-folder-open"></i> Preparar carpeta
+                      </button>
+                      <button onclick="window.anualEngine.borrarAusencia('${a.id}')" style="border: none; background: none; color: var(--text-muted); cursor: pointer;" title="Quitar">✕</button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              <div style="margin-top: 0.85rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                <div><label class="form-label" style="font-size: 0.72rem;">Desde</label><input type="date" id="ausencia-desde" class="form-input"></div>
+                <div><label class="form-label" style="font-size: 0.72rem;">Hasta (opcional)</label><input type="date" id="ausencia-hasta" class="form-input"></div>
+                <input id="ausencia-nota" class="form-input" placeholder="Nota (opcional, p. ej. solo por la mañana)" style="grid-column: 1 / -1;">
+                <button onclick="window.anualEngine.anadirAusencia()" style="grid-column: 1 / -1; border: 1px dashed var(--border-color); background: none; color: var(--accent-primary); font-size: 0.8rem; font-weight: 600; padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer;">
+                  <i class="fa-solid fa-plus"></i> Añadir ausencia
+                </button>
+              </div>
             </div>
 
           </div>
@@ -343,6 +356,35 @@ class AnualEngine {
     window.store.state.holidays.push({ id: 'HOL-' + Date.now(), name: nombre, date: desde, endDate: hasta || null, type: tipo });
     window.store.saveState();
     this.renderAnualView();
+  }
+
+  anadirAusencia() {
+    const desde = document.getElementById('ausencia-desde')?.value;
+    const hasta = document.getElementById('ausencia-hasta')?.value || '';
+    const nota = (document.getElementById('ausencia-nota')?.value || '').trim();
+    if (!desde) { window.app.showToast('Pon la fecha de la ausencia.', 'warning'); return; }
+    if (hasta && hasta < desde) { window.app.showToast('«Hasta» no puede ser antes de «Desde».', 'warning'); return; }
+    window.store.state.absences = (window.store.state.absences || []).map(a => a.id ? a : { ...a, id: 'AUS-' + Math.random().toString(36).slice(2) });
+    window.store.state.absences.push({ id: 'AUS-' + Date.now(), date: desde, endDate: hasta || null, notes: nota });
+    window.store.saveState();
+    this.renderAnualView();
+  }
+
+  borrarAusencia(id) {
+    const a = (window.store.state.absences || []).find(x => x.id === id);
+    if (!a || !confirm('¿Quitar esta ausencia?')) return;
+    window.store.state.absences = window.store.state.absences.filter(x => x.id !== id);
+    window.store.saveState();
+    this.renderAnualView();
+  }
+
+  // Abre la Carpeta de Sustitución con esos días ya elegidos
+  prepararCarpeta(id) {
+    const a = (window.store.state.absences || []).find(x => x.id === id);
+    if (!a) return;
+    window.store.state.substitutionRange = { start: a.date, end: a.endDate || a.date };
+    window.store.saveState();
+    window.app.switchView('sustitucion');
   }
 
   borrarFestivo(id) {
