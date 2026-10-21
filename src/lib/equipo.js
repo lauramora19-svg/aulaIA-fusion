@@ -93,8 +93,32 @@ export async function resumenGrupo(clase, alumno = null) {
   return lineas.join("\n");
 }
 
-// Contexto real para la IA: lo que la docente ha escrito del grupo y el perfil
-// del alumno (solo iniciales; nunca nombres completos).
+// Contexto real para la IA: lo que la docente ha escrito del grupo, el resumen
+// del grupo y las fichas (solo iniciales; nunca nombres completos).
+// - Para un alumno concreto: su ficha completa.
+// - Para el grupo entero: la ficha resumida de cada alumno/a con NEAE.
+const iniciales = (a) => [a.nombre, a.apellidos].filter(Boolean).join(" ").split(/\s+/).filter(Boolean).map(p => p[0] + ".").join(" ");
+const corta = (t, n) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+async function leerAgendaAlumnos() {
+  try {
+    const { data: ag } = await supabase.from("agenda_data").select("data").maybeSingle();
+    return ag?.data?.students || [];
+  } catch { return []; }
+}
+function fichaAlumno(alumno, agenda, completa) {
+  const pn = alumno.perfil_nee || {};
+  const nec = (pn.necesidades || []).map(id => NECESIDADES.find(n => n.id === id)?.desc || id);
+  const n = completa ? 600 : 220;
+  const l = [completa ? `- Iniciales: ${iniciales(alumno)}` : `• ${iniciales(alumno)}`];
+  l.push(alumno.tiene_nee ? `  NEAE${nec.length ? `: ${nec.join(", ")}` : ""}${pn.tipo_texto ? ` (${corta(pn.tipo_texto, 80)})` : ""}` : "  Sin NEAE registradas");
+  if (pn.medidas) l.push(`  Medidas: ${corta(pn.medidas, n)}`);
+  if (pn.apoyos) l.push(`  Apoyos: ${corta(pn.apoyos, n)}`);
+  if (alumno.notas) l.push(`  Notas de la docente: ${corta(alumno.notas, n)}`);
+  const s = alumno.agenda_student_id ? agenda.find(x => x.id === alumno.agenda_student_id) : null;
+  if (s?.notes) l.push(`  Pautas / adaptación (Agenda): ${corta(s.notes, n)}`);
+  if (s?.behavior) l.push(`  Conducta: ${corta(s.behavior, completa ? 300 : 120)}`);
+  return l.join("\n");
+}
 export async function contextoEncargo(clase, alumno = null) {
   if (!clase && !alumno) return "";
   const partes = [];
@@ -104,27 +128,17 @@ export async function contextoEncargo(clase, alumno = null) {
     if (g?.contexto?.trim()) partes.push(`CONTEXTO DEL GRUPO ${g.nombre || ""} (escrito por la docente):\n${g.contexto.trim()}`);
   }
   if (clase) partes.push(`DATOS DEL GRUPO:\n${await resumenGrupo(clase)}`);
+  const agenda = await leerAgendaAlumnos();
   if (alumno) {
-    const ini = [alumno.nombre, alumno.apellidos].filter(Boolean).join(" ").split(/\s+/).filter(Boolean).map(p => p[0] + ".").join(" ");
-    const pn = alumno.perfil_nee || {};
-    const nec = (pn.necesidades || []).map(id => NECESIDADES.find(n => n.id === id)?.desc || id);
-    const l = [`- Iniciales: ${ini}`];
-    l.push(alumno.tiene_nee ? `- Presenta NEAE${nec.length ? `: ${nec.join(", ")}` : ""}${pn.tipo_texto ? ` (${pn.tipo_texto})` : ""}` : "- Sin NEAE registradas");
-    if (pn.medidas) l.push(`- Medidas: ${pn.medidas}`);
-    if (pn.apoyos) l.push(`- Apoyos: ${pn.apoyos}`);
-    if (alumno.notas) l.push(`- Notas de la docente: ${alumno.notas}`);
-    // Lo apuntado en la Agenda (pautas/adaptación y conducta)
-    try {
-      if (alumno.agenda_student_id) {
-        const { data: ag } = await supabase.from("agenda_data").select("data").maybeSingle();
-        const s = (ag?.data?.students || []).find(x => x.id === alumno.agenda_student_id);
-        if (s?.notes) l.push(`- Pautas / adaptación (Agenda): ${s.notes}`);
-        if (s?.behavior) l.push(`- Conducta: ${s.behavior}`);
-      }
-    } catch { /* sin Agenda: seguimos */ }
-    partes.push(`ESTE DOCUMENTO ES PARA UN ALUMNO/A CONCRETO:\n${l.join("\n")}`);
+    partes.push(`ESTE DOCUMENTO ES PARA UN ALUMNO/A CONCRETO:\n${fichaAlumno(alumno, agenda, true)}`);
+  } else if (clase) {
+    let q = supabase.from("alumnos").select("nombre, apellidos, tiene_nee, perfil_nee, notas, agenda_student_id");
+    q = clase.grupo_id ? q.eq("grupo_id", clase.grupo_id) : q.eq("clase_id", clase.id);
+    const { data } = await q;
+    const conNee = (data || []).filter(a => a.tiene_nee).sort((a, b) => iniciales(a).localeCompare(iniciales(b), "es"));
+    if (conNee.length) partes.push(`ALUMNADO CON NEAE DEL GRUPO (incluye adaptaciones concretas para cada uno, citándolos solo por sus iniciales):\n${conNee.map(a => fichaAlumno(a, agenda, false)).join("\n")}`);
   }
-  return partes.join("\n\n").slice(0, 4000);
+  return partes.join("\n\n").slice(0, 8000);
 }
 
 export async function tokenActual() {
