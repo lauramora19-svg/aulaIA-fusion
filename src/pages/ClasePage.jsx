@@ -5,6 +5,7 @@ import { borrarAlumnoEnAgenda, borrarClaseEnAgenda, borrarGrupoEnAgenda } from "
 import ProgramarModal from "../components/ProgramarModal";
 import RellenarModeloModal from "../components/RellenarModeloModal";
 import AgendaVista from "../components/AgendaVista";
+import EvaluacionesGrupo from "../components/EvaluacionesGrupo";
 import EmptyState from "../components/EmptyState";
 import ClaseModal from "../components/ClaseModal";
 import { AlumnosModal, SubgruposModal, TransferirModal, VincularModal } from "../components/ClaseModales";
@@ -12,6 +13,7 @@ import { AlumnosModal, SubgruposModal, TransferirModal, VincularModal } from "..
 const TABS = [
   { id: "documentos", label: "📄 Documentos" },
   { id: "alumnos", label: "👥 Alumnos" },
+  { id: "evaluaciones", label: "📊 Evaluaciones" },
   { id: "agenda", label: "📅 Agenda" },
 ];
 
@@ -245,6 +247,8 @@ export default function ClasePage({ claseId, clases, onClasesChanged, onNuevoDoc
             </div>
           </>
         )
+      ) : tab === "evaluaciones" ? (
+        <EvaluacionesGrupo clase={clase} />
       ) : (
         <AgendaVista clases={clases} claseFija={clase} onAbrirDoc={onAbrirDoc} />
       )}
