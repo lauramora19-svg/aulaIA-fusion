@@ -165,6 +165,63 @@ function EditorEspecialista({ e: inicial, onClose, onSaved }) {
     const md = leerMdSubagente(await f.text());
     setE({ ...e, ...Object.fromEntries(Object.entries(md).filter(([, v]) => v)), id: e.nuevo ? md.id || e.id : e.id });
   };
+  // ✨ La IA redacta las instrucciones a partir de una descripción breve
+  const [idea, setIdea] = useState("");
+  const [redactando, setRedactando] = useState(false);
+  const redactarConIA = async () => {
+    if (!idea.trim()) { setError("Escribe en una o dos frases qué quieres que haga el especialista."); return; }
+    setError(""); setRedactando(true);
+    try {
+      const actuales = await listarEspecialistas(true).catch(() => []);
+      const ejemplo = actuales.find(x => x.id !== "coordinadora" && x.instrucciones) || null;
+      const tiposLista = TIPOS_CONSTRUCTOR.map(([t, l]) => `${t} (${l})`).join(", ");
+      const prompt = `ENCARGO: redacta un nuevo especialista (subagente) para el Equipo docente IA de AulaIA, una plataforma para docentes de Infantil, Primaria, ESO y Bachillerato en España (LOMLOE).
+
+LO QUE QUIERE LA ADMINISTRADORA:
+${idea.trim()}
+
+EQUIPO ACTUAL (no repitas sus funciones): ${actuales.map(x => `${x.nombre} — ${x.rol || ""}: ${x.corto || ""}`).join(" | ") || "Coordinadora, Arturo (actividades y materiales), Eva (evaluación), Carmen (familias)"}
+
+${ejemplo ? `EJEMPLO DE INSTRUCCIONES DE OTRO ESPECIALISTA (imita su estructura, tono y nivel de detalle, pero NO su contenido):\n${String(ejemplo.instrucciones).slice(0, 5000)}\n` : ""}
+REGLAS PARA LAS INSTRUCCIONES:
+- En segunda persona («Eres …»), en español, con apartados claros: quién eres, qué haces, cómo trabajas paso a paso, qué entregas (formato), qué NO haces, y cuándo pasar el encargo a otro especialista del equipo.
+- Genéricas: SIN nombres de personas ni del colegio. Usa estos huecos donde haga falta, escritos exactamente así: {docente} {centro} {comunidad} {etapa} {areas} {grupo}.
+- Enfoque inclusivo (DUA, NEAE) y nomenclatura LOMLOE.
+
+RESPONDE EXACTAMENTE CON ESTE FORMATO (sin nada antes ni después, sin negritas en las etiquetas):
+NOMBRE: (un nombre propio corto, como los del equipo)
+AREA: (2-4 palabras)
+FRASE: (una frase corta para los demás docentes)
+DESCRIPCION: (una línea)
+CLAVES: (8-15 palabras clave separadas por comas, en minúscula, para el reparto automático)
+TIPOS: (de esta lista, solo los ids que le correspondan, separados por comas, o «ninguno»: ${tiposLista})
+INSTRUCCIONES:
+(las instrucciones completas)`;
+      const res = await fetch("/api/generar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptOverride: prompt, accessToken: await tokenActual(), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano" }),
+      });
+      if (!res.ok) throw new Error("No se ha podido redactar. Inténtalo de nuevo.");
+      let txt = "";
+      await leerStreamSSE(res, (d) => { txt += d; });
+      txt = txt.replace(/\n?---\n?✅ Documento completo generado por AulaIA\s*$/, "").replace(/\*\*/g, "");
+      const campo = (k) => (txt.match(new RegExp(`^\\s*${k}:\\s*(.+)$`, "mi")) || [])[1]?.trim() || "";
+      const iIns = txt.search(/^\s*INSTRUCCIONES:/mi);
+      const instrucciones = iIns >= 0 ? txt.slice(iIns).replace(/^\s*INSTRUCCIONES:\s*/i, "").trim() : txt.trim();
+      const validos = new Set(TIPOS_CONSTRUCTOR.map(([t]) => t));
+      setE(prev => ({
+        ...prev,
+        nombre: prev.nombre || campo("NOMBRE"),
+        rol: prev.rol || campo("AREA"),
+        corto: prev.corto || campo("FRASE"),
+        descripcion: prev.descripcion || campo("DESCRIPCION"),
+        claves: (prev.claves || []).length ? prev.claves : campo("CLAVES").split(",").map(x => x.trim().toLowerCase()).filter(Boolean),
+        tipos: (prev.tipos || []).length ? prev.tipos : campo("TIPOS").split(",").map(x => x.trim()).filter(t => validos.has(t)),
+        instrucciones,
+      }));
+    } catch (err) { setError(err.message); }
+    setRedactando(false);
+  };
   const alternarTipo = (t) => setE({ ...e, tipos: e.tipos.includes(t) ? e.tipos.filter(x => x !== t) : [...e.tipos, t] });
   const guardar = async () => {
     if (!e.nombre.trim() || !e.instrucciones.trim()) { setError("Faltan el nombre o las instrucciones."); return; }
@@ -178,7 +235,15 @@ function EditorEspecialista({ e: inicial, onClose, onSaved }) {
   return (
     <Modal titulo={e.nuevo ? "Añadir especialista" : `Editar a ${e.nombre}`} onClose={onClose}>
       <div className="crm-form">
-        {e.nuevo && <Campo label="Subir el .md del subagente (el mismo de VS Code)" hint="Se leen el nombre, la descripción y las instrucciones."><input type="file" accept=".md,.txt" onChange={ev => leerArchivo(ev.target.files?.[0])} /></Campo>}
+        {e.nuevo && <p className="crm-muted">Elige cómo prefieres crearlo: sube el .md de VS Code, deja que la IA escriba las instrucciones o escríbelas tú abajo.</p>}
+        {e.nuevo && <Campo label="Opción 1 · Subir el .md del subagente (el mismo de VS Code)" hint="Se leen el nombre, la descripción y las instrucciones."><input type="file" accept=".md,.txt" onChange={ev => leerArchivo(ev.target.files?.[0])} /></Campo>}
+        {e.nuevo && (
+          <Campo label="Opción 2 · ✨ Que la IA escriba las instrucciones" hint="Cuéntale en una o dos frases qué quieres que haga. Rellena el formulario y luego lo revisas y corriges.">
+            <textarea className="input-tema" rows={3} value={idea} onChange={ev => setIdea(ev.target.value)} placeholder="Ej.: especialista en orientación y tutoría: dinámicas de grupo, resolución de conflictos y preparación de entrevistas con familias" />
+            <div style={{ marginTop: 6 }}><button type="button" className="doc-btn" onClick={redactarConIA} disabled={redactando}>{redactando ? "⏳ Escribiendo las instrucciones…" : "✨ Escribir las instrucciones con IA"}</button></div>
+          </Campo>
+        )}
+        {e.nuevo && <p className="crm-muted" style={{ marginTop: -4 }}>Opción 3 · Escríbelo tú directamente en los campos de abajo.</p>}
         <div className="crm-form-row">
           <Campo label="Nombre"><input className="input-tema" value={e.nombre} onChange={set("nombre")} /></Campo>
           <Campo label="Área (p. ej. Burocracia)"><input className="input-tema" value={e.rol} onChange={set("rol")} /></Campo>
