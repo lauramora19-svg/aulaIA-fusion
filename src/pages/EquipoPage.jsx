@@ -4,6 +4,7 @@ import { miPerfil, listarEspecialistas, guardarEspecialista, leerMdSubagente, re
 import { leerStreamSSE } from "../lib/stream";
 import { renderResultado } from "../lib/render";
 import { exportarWordContenido } from "../lib/word";
+import { BotonPromptChatGPT, quitarPromptChatGPT } from "../lib/promptChatGPT";
 import Modal from "../components/Modal";
 import Campo from "../components/Campo";
 
@@ -116,8 +117,9 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
           <div className="resultado-body">{renderResultado(res.texto || "…")}</div>
           {!generando && res.texto && (
             <div className="crm-modal-actions" style={{ flexWrap: "wrap" }}>
-              <button className="btn-copy" onClick={() => { navigator.clipboard.writeText(res.texto); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? "✅ Copiado" : "📋 Copiar"}</button>
-              <button className="btn-word" onClick={() => exportarWordContenido(res.texto, `${r?.nombre || "Equipo"} — ${res.pedido.slice(0, 40)}`)}>📄 Descargar Word</button>
+              <button className="btn-copy" onClick={() => { navigator.clipboard.writeText(quitarPromptChatGPT(res.texto)); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? "✅ Copiado" : "📋 Copiar"}</button>
+              <BotonPromptChatGPT texto={res.texto} />
+              <button className="btn-word" onClick={() => exportarWordContenido(quitarPromptChatGPT(res.texto), `${r?.nombre || "Equipo"} — ${res.pedido.slice(0, 40)}`)}>📄 Descargar Word</button>
               {guardado
                 ? <button className="library-new-btn" onClick={() => onAbrirDoc?.(guardado)}>📄 Abrir (y 📅 programar)</button>
                 : <button className="library-new-btn" onClick={guardar}>💾 Guardar en Mis documentos</button>}
