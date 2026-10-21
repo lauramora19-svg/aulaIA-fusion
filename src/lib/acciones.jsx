@@ -1,4 +1,5 @@
 // Acciones «a partir de esta programación» (rúbrica, ficha, examen…).
+import { BotonPromptChatGPT, quitarPromptChatGPT } from "./promptChatGPT";
 // Se usan al terminar de generar y también desde Mis documentos.
 import { useState } from "react";
 import { supabase } from "./supabase";
@@ -11,7 +12,7 @@ export const FIRMA_COMPLETO = "✅ Documento completo generado por AulaIA";
 
 // ─── COPIAR TEXTO LIMPIO ──────────────────────────────────────────────────────
 export const copiarTextoLimpio = async (texto) => {
-  let limpio = texto
+  let limpio = quitarPromptChatGPT(texto)
     .replace(/---\n✅ Documento completo generado por AulaIA/g,"")
     .replace(/---\n⚠️[^\n]*/g,"")
     .replace(/^#{1,6} (.+)$/gm, (_,t) => t.toUpperCase())
@@ -86,6 +87,7 @@ export function AccionResultado({ tipo, texto, label, emoji, area, curso, comuni
         <div style={{display:"flex",gap:8,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
           {texto && <>
             <button className="btn-copy" style={{padding:"5px 12px",fontSize:12}} onClick={copiar}>{copiado?"✅ Copiado":"📋 Copiar"}</button>
+            <BotonPromptChatGPT texto={texto} pequeno />
             <button className="btn-word" style={{padding:"5px 12px",fontSize:12}} onClick={descargarWord} disabled={descargando}>{descargando?"⏳...":"📄 Word"}</button>
           </>}
           <span style={{fontSize:12,color:"#78716c"}}>{expandido?"▲":"▼"}</span>

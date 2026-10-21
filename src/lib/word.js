@@ -1,5 +1,8 @@
 // ─── EXPORTAR WORD ────────────────────────────────────────────────────────────
-export const exportarWordContenido = async (contenido, tituloDoc) => {
+import { quitarPromptChatGPT } from "./promptChatGPT";
+
+export const exportarWordContenido = async (contenidoOriginal, tituloDoc) => {
+  const contenido = quitarPromptChatGPT(contenidoOriginal || "");
   const res = await fetch("/api/exportar-word", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ contenido, titulo: tituloDoc }),
