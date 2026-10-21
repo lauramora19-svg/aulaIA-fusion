@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { miPerfil, listarEspecialistas, guardarEspecialista, leerMdSubagente, repartir, resumenGrupo, tokenActual, TIPOS_CONSTRUCTOR } from "../lib/equipo";
+import { miPerfil, listarEspecialistas, guardarEspecialista, leerMdSubagente, repartir, resumenGrupo, tokenActual, contextoEncargo, TIPOS_CONSTRUCTOR } from "../lib/equipo";
 import { leerStreamSSE } from "../lib/stream";
 import { renderResultado } from "../lib/render";
 import { exportarWordContenido } from "../lib/word";
@@ -51,7 +51,7 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
       const prompt = `ENCARGO:\n${pedido.trim()}${previo ? `\n\nMATERIAL DE PARTIDA (de otro especialista del equipo):\n${previo.slice(0, 12000)}` : ""}\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
       const r = await fetch("/api/generar", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.current.signal,
-        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, accessToken: await tokenActual(), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
+        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase).catch(() => "") : "", accessToken: await tokenActual(), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
       });
       if (!r.ok) throw new Error("No se pudo generar. Inténtalo de nuevo.");
       let full = "";
