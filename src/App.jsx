@@ -9,6 +9,8 @@ import AgendaEmbed from "./components/AgendaEmbed";
 import EquipoPage from "./pages/EquipoPage";
 import PerfilPage from "./pages/PerfilPage";
 import AdminPage from "./pages/AdminPage";
+import CentroPage from "./pages/CentroPage";
+import { miCentroInfo } from "./lib/centros";
 import SustitucionesPage from "./pages/SustitucionesPage";
 import SustAvisos from "./components/SustAvisos";
 import { misEtapasSust } from "./lib/sustituciones";
@@ -753,6 +755,7 @@ export default function App() {
   const [esAdmin, setEsAdmin] = useState(false);
   const [sustEtapas, setSustEtapas] = useState([]); // etapas que gestiona (equipo directivo)
   const [centro, setCentro] = useState("");
+  const [esAdminCentro, setEsAdminCentro] = useState(false);
   const [avisoLimite, setAvisoLimite] = useState(null);
   useEffect(() => {
     const f = (e) => setAvisoLimite(e.detail || {});
@@ -773,7 +776,10 @@ export default function App() {
     if (!session) return;
     cargarClases();
     iniciarAgenda();
-    miPerfil().then(p => { setEsAdmin(p?.rol === "admin"); setCentro(p?.centro || ""); }).catch(() => {});
+    Promise.all([miPerfil().catch(() => null), miCentroInfo().catch(() => null)]).then(([p, c]) => {
+      setEsAdmin(p?.rol === "admin"); setEsAdminCentro(!!c?.admin_centro);
+      setCentro(p?.centro || c?.nombre || "");
+    });
     misEtapasSust().then(setSustEtapas).catch(() => {});
     // Enlace directo a un documento (?doc=...), p. ej. desde la Agenda docente
     const docParam = new URLSearchParams(window.location.search).get("doc");
@@ -809,7 +815,7 @@ export default function App() {
       <Navbar session={session} view={view} onGoLibrary={()=>ir("library")} onGoNew={()=>nuevoDocumento()}/>
       <div className="crm-layout">
         <Sidebar
-          view={view} seccion={params.seccion} clases={clases} claseActivaId={params.claseId} onNuevo={()=>nuevoDocumento()} esAdmin={esAdmin} esDirectivo={sustEtapas.length>0}
+          view={view} seccion={params.seccion} clases={clases} claseActivaId={params.claseId} onNuevo={()=>nuevoDocumento()} esAdmin={esAdmin} esAdminCentro={esAdminCentro} esDirectivo={sustEtapas.length>0}
           abierta={menuMovil} onCerrar={()=>setMenuMovil(false)}
           onGo={(v, p)=>ir(v, p)} onNuevaClase={()=>setClaseModal(true)} onConectarAgenda={()=>setAgendaModal(true)}
         />
@@ -822,6 +828,7 @@ export default function App() {
           {view==="equipo"    &&<EquipoPage clases={clases} onAbrirDoc={abrirDoc}/>}
           {view==="perfil"    &&<PerfilPage/>}
           {view==="admin" && esAdmin &&<AdminPage onCargos={()=>misEtapasSust().then(setSustEtapas)}/>}
+          {view==="centro" && esAdminCentro &&<CentroPage centro={centro} onCargos={()=>misEtapasSust().then(setSustEtapas)}/>}
           {view==="sust" && sustEtapas.length>0 &&<SustitucionesPage etapas={sustEtapas} centro={centro}/>}
           {view==="clase"     &&<ClasePage key={params.claseId} claseId={params.claseId} clases={clases} onClasesChanged={async (nuevaId)=>{ await cargarClases(); if (typeof nuevaId === "string") ir("clase",{claseId:nuevaId}); }} onNuevoDocumento={nuevoDocumento} onAbrirAlumno={(id, cid)=>ir("alumno",{alumnoId:id, claseId:cid})} onAbrirDoc={abrirDoc} onEliminada={()=>{cargarClases();ir("inicio");}}/>}
           {view==="alumno"    &&<AlumnoPage key={params.alumnoId} alumnoId={params.alumnoId} claseId={params.claseId} clases={clases} onVolverClase={id=>ir("clase",{claseId:id})} onNuevoDocumento={nuevoDocumento} onAbrirDoc={abrirDoc}/>}
