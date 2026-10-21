@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import TituloEditable from "../components/TituloEditable";
 
 const TIPO_LABELS = {
   actividades:"Actividades adaptadas", programacion:"Programación didáctica",
@@ -104,7 +105,7 @@ export default function LibraryPage({ onOpen, onNew }) {
                   </span>
                   {doc.compartido && <span className="doc-shared-icon" title="Compartido">🔗</span>}
                 </div>
-                <h3 className="doc-title">{doc.titulo || `${TIPO_LABELS[doc.tipo_resultado] || doc.tipo_resultado}`}</h3>
+                <TituloEditable className="doc-title" docId={doc.id} titulo={doc.titulo || `${TIPO_LABELS[doc.tipo_resultado] || doc.tipo_resultado}`} onGuardado={(t) => setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, titulo: t } : d))} />
                 <p className="doc-meta">{[doc.curso, doc.area, doc.comunidad].filter(Boolean).join(" · ")}</p>
                 <p className="doc-date">{formatDate(doc.created_at)}</p>
                 <div className="doc-actions" onClick={e => e.stopPropagation()}>

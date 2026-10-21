@@ -248,7 +248,7 @@ export default function ClasePage({ claseId, clases, onClasesChanged, onNuevoDoc
           </>
         )
       ) : tab === "evaluaciones" ? (
-        <EvaluacionesGrupo clase={clase} />
+        <EvaluacionesGrupo clase={clase} clases={clases} onAbrirDoc={onAbrirDoc} />
       ) : (
         <AgendaVista clases={clases} claseFija={clase} onAbrirDoc={onAbrirDoc} />
       )}

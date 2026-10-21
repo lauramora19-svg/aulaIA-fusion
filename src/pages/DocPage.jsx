@@ -4,6 +4,7 @@ import { exportarWordContenido } from "../lib/word";
 import { renderResultado } from "../lib/render";
 import ProgramarModal from "../components/ProgramarModal";
 import { AccionesSiguientes } from "../lib/acciones";
+import TituloEditable from "../components/TituloEditable";
 
 export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false }) {
   const [doc, setDoc]     = useState(null);
@@ -62,7 +63,9 @@ export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false })
       <div className="doc-page-header">
         <div className="doc-page-meta">
           {onBack && <button className="btn-back-sm" onClick={onBack}>← Volver</button>}
-          <h1 className="doc-page-title">{doc.titulo || "Programación"}</h1>
+          {isShared
+            ? <h1 className="doc-page-title">{doc.titulo || "Programación"}</h1>
+            : <TituloEditable Tag="h1" className="doc-page-title" docId={doc.id} titulo={doc.titulo} placeholder="Programación" onGuardado={(t) => setDoc(d => ({ ...d, titulo: t }))} />}
           <p className="doc-page-sub">
             {[doc.curso, doc.area, doc.comunidad].filter(Boolean).join(" · ")}
             {" · "}{new Date(doc.created_at).toLocaleDateString("es-ES")}
