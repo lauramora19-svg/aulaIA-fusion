@@ -538,7 +538,7 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
   // Contexto real del grupo y del alumno (si el encargo se hace desde una clase o una ficha)
   const promptBase = (contextoCurricular && !prompt.includes(contextoCurricular)) ? `${prompt}${contextoCurricular}` : prompt;
   const promptFinal = contextoEncargo && String(contextoEncargo).trim()
-    ? `${promptBase}\n\n════════════\nCONTEXTO REAL DEL AULA (tenlo en cuenta para adaptar TODO el documento; no inventes nombres):\n${String(contextoEncargo).slice(0, 8000)}`
+    ? `${promptBase}\n\n════════════\nCONTEXTO REAL DEL AULA (tenlo en cuenta para adaptar TODO el documento; no inventes nombres):\n${String(contextoEncargo).slice(0, 10000)}`
     : promptBase;
   const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
