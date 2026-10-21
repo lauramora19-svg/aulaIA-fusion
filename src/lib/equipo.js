@@ -128,6 +128,13 @@ export async function contextoEncargo(clase, alumno = null) {
     if (g?.contexto?.trim()) partes.push(`CONTEXTO DEL GRUPO ${g.nombre || ""} (escrito por la docente):\n${g.contexto.trim()}`);
   }
   if (clase) partes.push(`DATOS DEL GRUPO:\n${await resumenGrupo(clase)}`);
+  if (grupoId) {
+    // Las dos últimas sesiones de evaluación del grupo (resumen escrito por la docente)
+    try {
+      const { data: ev } = await supabase.from("grupo_evaluaciones").select("periodo, resumen, updated_at").eq("grupo_id", grupoId).order("created_at", { ascending: false }).limit(2);
+      if (ev?.length) partes.push(`ÚLTIMAS EVALUACIONES DEL GRUPO (tenlas en cuenta: dificultades, acuerdos y propuestas de mejora):\n${ev.map(e => `${e.periodo}:\n${String(e.resumen || "").trim().slice(0, 1500)}`).join("\n\n")}`);
+    } catch { /* sin evaluaciones: seguimos */ }
+  }
   const agenda = await leerAgendaAlumnos();
   if (alumno) {
     partes.push(`ESTE DOCUMENTO ES PARA UN ALUMNO/A CONCRETO:\n${fichaAlumno(alumno, agenda, true)}`);
