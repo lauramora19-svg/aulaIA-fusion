@@ -539,7 +539,11 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
   // Fichas, materiales y exámenes: marcar dónde van las imágenes y añadir al final un
   // prompt para que ChatGPT cree la ficha completa (maquetación + imágenes).
   const TIPOS_VISUALES = ["ficha", "examen", "actividades", "mixto_actividades", "recursos", "manipulativo", "flashcards", "pictogramas", "cuento", "preguntas", "plan_alumno"];
-  const bloqueVisual = (!continuarDesde && TIPOS_VISUALES.includes(tipoResultado)) ? `
+  // Encargos del Equipo docente: se mira qué ha pedido el docente (ficha, examen, prueba...)
+  const pedidoEncargo = tipoResultado === "encargo" ? ((String(prompt).match(/ENCARGO:\n([\s\S]*?)(?:\n\nMATERIAL DE PARTIDA|\n\nAl terminar|$)/) || [])[1] || "") : "";
+  const ENCARGO_VISUAL = /\b(fichas?|ex[aá]men(es)?|pruebas?|controles?|control|tests?|ejercicios?|actividades|cuadernillos?|material(es)?|tarjetas?|flashcards?|pictogramas?|cuentos?|l[aá]minas?|bingos?|domin[oó]s?|memory|juegos? de mesa|evaluaci[oó]n escrita)(?![\wáéíóúñ])/i;
+  const esVisual = TIPOS_VISUALES.includes(tipoResultado) || (tipoResultado === "encargo" && ENCARGO_VISUAL.test(pedidoEncargo));
+  const bloqueVisual = (!continuarDesde && esVisual) ? `
 
 ════════════
 IMÁGENES Y PROMPT PARA CHATGPT (obligatorio en este tipo de documento):
