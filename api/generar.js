@@ -536,7 +536,27 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
 
   // ── LLAMADA A CLAUDE ──────────────────────────────────────────────────────
   // Contexto real del grupo y del alumno (si el encargo se hace desde una clase o una ficha)
-  const promptBase = (contextoCurricular && !prompt.includes(contextoCurricular)) ? `${prompt}${contextoCurricular}` : prompt;
+  // Fichas, materiales y exámenes: marcar dónde van las imágenes y añadir al final un
+  // prompt para que ChatGPT cree la ficha completa (maquetación + imágenes).
+  const TIPOS_VISUALES = ["ficha", "examen", "actividades", "mixto_actividades", "recursos", "manipulativo", "flashcards", "pictogramas", "cuento", "preguntas", "plan_alumno"];
+  const bloqueVisual = (!continuarDesde && TIPOS_VISUALES.includes(tipoResultado)) ? `
+
+════════════
+IMÁGENES Y PROMPT PARA CHATGPT (obligatorio en este tipo de documento):
+1. Donde una actividad o pregunta necesite una imagen (dibujos para rodear, contar, colorear, relacionar, ordenar, observar; mapas, esquemas, gráficos, escenas...), escribe en ese mismo sitio, en una línea aparte: 🖼️ **[Imagen N: descripción breve de lo que debe verse]**. Numera las imágenes 1, 2, 3...
+2. Justo ANTES de la línea final de firma, añade esta sección (con este título exacto):
+
+## 🎨 Prompt para ChatGPT
+Copia este texto en ChatGPT para que cree la ficha completa con sus imágenes.
+
+y debajo, en texto normal (sin bloques de código, sin tablas), UN ÚNICO prompt completo en español dirigido a ChatGPT que diga:
+- Qué tiene que crear: «Crea esta [ficha / examen / material] como imagen en formato A4 vertical, lista para imprimir y fotocopiar. Si no cabe en una página, crea una imagen por página.»
+- Para quién es: etapa, curso y edad aproximada; si hay alumnado con NEE, letra grande, pocos elementos por página, mucho espacio en blanco y apoyos visuales.
+- Estilo visual: dibujos sencillos de línea clara, fondo blanco, alto contraste, que se vea bien en blanco y negro (color suave solo si es material para recortar o tarjetas), tipografía escolar clara y grande, márgenes amplios, recuadros sencillos.
+- La estructura exacta, en orden: cabecera (título, Nombre, Fecha, Curso) y, para CADA actividad o pregunta, su número, el enunciado COPIADO LITERALMENTE del documento, los espacios para responder (líneas, recuadros, casillas) y la imagen que la acompaña descrita con detalle (qué objetos, cuántos, cómo están colocados).
+- Que todo el texto esté en español, sin faltas de ortografía y sin cambiar ningún enunciado; que NO incluya soluciones, notas para el docente ni la sección de autoevaluación si es un examen.
+El prompt tiene que poder pegarse tal cual: no pongas comentarios fuera de él.` : "";
+  const promptBase = `${(contextoCurricular && !prompt.includes(contextoCurricular)) ? `${prompt}${contextoCurricular}` : prompt}${bloqueVisual}`;
   const promptFinal = contextoEncargo && String(contextoEncargo).trim()
     ? `${promptBase}\n\n════════════\nCONTEXTO REAL DEL AULA (tenlo en cuenta para adaptar TODO el documento; no inventes nombres):\n${String(contextoEncargo).slice(0, 10000)}`
     : promptBase;
