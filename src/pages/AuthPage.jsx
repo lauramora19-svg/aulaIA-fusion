@@ -22,11 +22,18 @@ export default function AuthPage() {
         setMsg({ type: "err", text: "La contraseña debe tener al menos 8 caracteres." });
         setLoading(false); return;
       }
-      if (!email.endsWith("@nscarmen.corazonistas.org")) {
-        setMsg({ type: "err", text: "Durante la fase beta, el registro está limitado al equipo docente de Nuestra Señora del Carmen. Usa tu email del centro (@nscarmen.corazonistas.org)." });
+      // Solo pueden registrarse los correos de los colegios dados de alta en AulaIA
+      const correo = email.trim().toLowerCase();
+      const { data: permitido, error: errDominio } = await supabase.rpc("dominio_permitido", { p_email: correo });
+      if (errDominio) {
+        setMsg({ type: "err", text: "No se ha podido comprobar tu correo. Inténtalo de nuevo en un momento." });
         setLoading(false); return;
       }
-      const { error } = await supabase.auth.signUp({ email, password });
+      if (!permitido) {
+        setMsg({ type: "err", text: "Tu colegio todavía no está dado de alta en AulaIA. Regístrate con el correo de tu centro o pide a tu colegio que se ponga en contacto con AulaIA." });
+        setLoading(false); return;
+      }
+      const { error } = await supabase.auth.signUp({ email: correo, password });
       if (error) setMsg({ type: "err", text: "Este email ya está registrado o no es válido." });
       else setMsg({ type: "ok", text: "¡Cuenta creada! Revisa tu email para confirmarla." });
 
