@@ -5,6 +5,9 @@ import { NECESIDADES } from "../lib/datos";
 import { trimestres, trimestreActual, nombreCompleto, mensajeError, TIPOS_SEGUIMIENTO } from "../lib/crm";
 import Modal from "./Modal";
 import Campo from "./Campo";
+import { informesDeEvaluacion } from "../lib/equipo";
+
+const PERIODOS_TRIM = { 1: ["1ª evaluación"], 2: ["2ª evaluación"], 3: ["3ª evaluación", "Evaluación final"] };
 
 const FIRMA = /\n?---\n?✅ Documento completo generado por AulaIA\s*$/;
 
@@ -37,12 +40,13 @@ export default function RellenarModeloModal({ clase, alumnos, onClose, onCreado 
         const regs = dentro.filter(s => s.alumno_id === a.id).map(s => `${TIPOS_SEGUIMIENTO[s.tipo]?.label || s.tipo}: ${s.texto}`).join(" | ");
         return `${i + 1}. ${nombreCompleto(a)}${nee ? ` — NEE: ${nee}` : ""}${regs ? ` — Seguimiento: ${regs}` : ""}`;
       }).join("\n");
+      const informes = await informesDeEvaluacion(clase, PERIODOS_TRIM[tri.id] || []);
       const prompt = `Rellena el modelo oficial del centro "${pl.nombre}" para el grupo ${clase.nombre} (${clase.curso || ""}, ${clase.area || ""}), ${tri.label}.
 
 ALUMNADO (por orden alfabético de apellido):
 ${filas || "(sin alumnado registrado)"}
 
-${extra ? `INDICACIONES DE LA DOCENTE: ${extra}\n` : ""}
+${informes ? `RESUMEN DE LA EVALUACIÓN E INFORMES DE RESULTADOS (úsalos para los apartados de resultados, dificultades, acuerdos y propuestas):\n${informes}\n\n` : ""}${extra ? `INDICACIONES DE LA DOCENTE: ${extra}\n` : ""}
 REGLAS:
 - Respeta EXACTAMENTE la estructura del modelo (apartados, orden, tablas y columnas).
 - Usa solo los datos facilitados; no inventes calificaciones ni hechos. Donde falte un dato, deja _______________.
@@ -53,7 +57,7 @@ REGLAS:
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/generar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comunidad: clase.comunidad, etapa: clase.etapa, curso: clase.curso, area: clase.area, modo: "ordinario", tipoResultado: "acta", idioma: "Castellano", promptOverride: prompt, plantillaId, accessToken: session?.access_token }),
+        body: JSON.stringify({ comunidad: clase.comunidad, etapa: clase.etapa, curso: clase.curso, area: clase.area, modo: "ordinario", tipoResultado: "acta", especialistaId: "eva", idioma: "Castellano", promptOverride: prompt, plantillaId, accessToken: session?.access_token }),
       });
       if (!res.ok) throw new Error("api");
       let full = "";
