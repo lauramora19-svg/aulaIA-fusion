@@ -5,6 +5,7 @@ import { renderResultado } from "../lib/render";
 import ProgramarModal from "../components/ProgramarModal";
 import { AccionesSiguientes } from "../lib/acciones";
 import TituloEditable from "../components/TituloEditable";
+import { BotonPromptChatGPT, quitarPromptChatGPT } from "../lib/promptChatGPT";
 
 export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false }) {
   const [doc, setDoc]     = useState(null);
@@ -40,7 +41,7 @@ export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false })
   }, [docId]);
 
   const copy = () => {
-    navigator.clipboard.writeText(doc.contenido);
+    navigator.clipboard.writeText(quitarPromptChatGPT(doc.contenido));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -73,6 +74,7 @@ export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false })
         </div>
         <div className="doc-page-actions">
           <button className="btn-copy" onClick={copy}>{copied ? "¡Copiado!" : "📋 Copiar"}</button>
+          <BotonPromptChatGPT texto={doc.contenido} />
           {!isShared && <button className="btn-word" onClick={descargarWord} disabled={descargando}>{descargando ? "⏳..." : "📄 Word"}</button>}
           {!isShared && <button className="doc-btn" onClick={() => setProgramar(true)}>📅 Programar en un día</button>}
         </div>
