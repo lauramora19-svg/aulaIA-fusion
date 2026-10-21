@@ -26,6 +26,7 @@ import { iniciarAgenda, pedirSincronizacion } from "./lib/agenda";
 import { mensajeError } from "./lib/crm";
 import { COMUNIDADES, ETAPAS, CURSOS, AREAS, NECESIDADES, asignaturasDe } from "./lib/datos";
 import { leerStreamSSE } from "./lib/stream";
+import TituloEditable from "./components/TituloEditable";
 import { exportarWordContenido } from "./lib/word";
 import { renderResultado } from "./lib/render";
 import { listarEspecialistas, resumenGrupo, tokenActual, contextoEncargo } from "./lib/equipo";
@@ -373,6 +374,7 @@ function Generator({ onSaved, contexto }) {
   const [abortController, setAbortController] = useState(null);
   const [resultado, setResultado]     = useState("");
   const [savedDocId, setSavedDocId]   = useState(null);
+  const [savedTitulo, setSavedTitulo] = useState("");
   const [documentoCompleto, setDocumentoCompleto] = useState(false);
   const [documentoIncompleto, setDocumentoIncompleto] = useState(false);
   const [seccionesFaltantes, setSeccionesFaltantes] = useState("");
@@ -442,7 +444,7 @@ function Generator({ onSaved, contexto }) {
             comentario, contenido: full, compartido: false,
             ...(ctxClase ? { clase_id: ctxClase.id } : {}), ...(ctxAlumno ? { alumno_id: ctxAlumno.id } : {}),
           }).select("id").single();
-          if (inserted?.id) setSavedDocId(inserted.id);
+          if (inserted?.id) { setSavedDocId(inserted.id); setSavedTitulo(titulo); }
         }
         setSaved(true); setSaving(false);
       }
@@ -552,6 +554,7 @@ function Generator({ onSaved, contexto }) {
           <div>
             <h2 className="resultado-title">{loading?"⏳ Generando...":"✅ Listo para usar"}</h2>
             <p className="resultado-sub">{saving?"💾 Guardando...":saved?"💾 Guardado en tu biblioteca":""}</p>
+            {saved&&savedDocId&&!loading&&<TituloEditable Tag="p" className="resultado-sub" docId={savedDocId} titulo={savedTitulo} onGuardado={setSavedTitulo} />}
           </div>
           {!loading&&(
             <div className="resultado-actions">
