@@ -27,6 +27,7 @@ import { mensajeError } from "./lib/crm";
 import { COMUNIDADES, ETAPAS, CURSOS, AREAS, NECESIDADES, asignaturasDe } from "./lib/datos";
 import { leerStreamSSE } from "./lib/stream";
 import TituloEditable from "./components/TituloEditable";
+import { BotonPromptChatGPT, quitarPromptChatGPT } from "./lib/promptChatGPT";
 import { exportarWordContenido } from "./lib/word";
 import { renderResultado } from "./lib/render";
 import { listarEspecialistas, resumenGrupo, tokenActual, contextoEncargo } from "./lib/equipo";
@@ -172,7 +173,7 @@ const BtnCancelar = ({ onClick }) => (
 
 // ─── COPIAR TEXTO LIMPIO ──────────────────────────────────────────────────────
 const copiarTextoLimpio = async (texto) => {
-  let limpio = texto
+  let limpio = quitarPromptChatGPT(texto)
     .replace(/---\n✅ Documento completo generado por AulaIA/g,"")
     .replace(/---\n⚠️[^\n]*/g,"")
     .replace(/^#{1,6} (.+)$/gm, (_,t) => t.toUpperCase())
@@ -282,6 +283,7 @@ function AccionResultado({ tipo, texto, label, emoji, area, curso, comunidad, mo
         <div style={{display:"flex",gap:8,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
           {texto && <>
             <button className="btn-copy" style={{padding:"5px 12px",fontSize:12}} onClick={copiar}>{copiado?"✅ Copiado":"📋 Copiar"}</button>
+            <BotonPromptChatGPT texto={texto} pequeno />
             <button className="btn-word" style={{padding:"5px 12px",fontSize:12}} onClick={descargarWord} disabled={descargando}>{descargando?"⏳...":"📄 Word"}</button>
           </>}
           <span style={{fontSize:12,color:"#78716c"}}>{expandido?"▲":"▼"}</span>
@@ -559,6 +561,7 @@ function Generator({ onSaved, contexto }) {
           {!loading&&(
             <div className="resultado-actions">
               <button className="btn-copy" onClick={copiarPrincipal}>{copiado?"✅ Copiado":"📋 Copiar"}</button>
+              <BotonPromptChatGPT texto={resultado} />
               <button className="btn-word" onClick={exportarWord} disabled={descargando}>{descargando?"⏳ Generando...":"📄 Descargar Word"}</button>
               <button className="btn-copy" style={{background:"rgba(129,140,248,0.15)",color:"#a5b4fc",borderColor:"rgba(129,140,248,0.3)"}} onClick={onSaved}>📂 Mi biblioteca</button>
               <button className="btn-reset" onClick={reset}>🔄 Nueva</button>
