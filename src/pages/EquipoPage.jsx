@@ -5,6 +5,7 @@ import { leerStreamSSE } from "../lib/stream";
 import { renderResultado } from "../lib/render";
 import { exportarWordContenido } from "../lib/word";
 import { BotonPromptChatGPT, quitarPromptChatGPT } from "../lib/promptChatGPT";
+import EncabezadoSelect from "../components/EncabezadoSelect";
 import Modal from "../components/Modal";
 import Campo from "../components/Campo";
 
@@ -31,6 +32,7 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
   const [error, setError] = useState("");
   const [guardado, setGuardado] = useState(null);
   const [copiado, setCopiado] = useState(false);
+  const [encabezadoId, setEncabezadoId] = useState("");
   const [editar, setEditar] = useState(null); // especialista en edición (admin)
   const ctrl = useRef(null);
 
@@ -66,7 +68,7 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
     const esp = porId(res.espId);
     const { data, error } = await supabase.from("programaciones").insert({
       user_id: user.id, titulo: `${esp?.nombre || "Equipo"} — ${res.pedido.slice(0, 70)}`, modo: "ordinario", tipo_resultado: "encargo",
-      contenido: res.texto, compartido: false, ...(claseId ? { clase_id: claseId } : {}),
+      contenido: res.texto, compartido: false, ...(encabezadoId ? { encabezado_id: encabezadoId } : {}), ...(claseId ? { clase_id: claseId } : {}),
     }).select("id").single();
     if (error) setError(error.message); else setGuardado(data.id);
   };
@@ -115,11 +117,12 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
         <section className="card" style={{ borderTop: `4px solid ${r?.color || "#f97316"}` }}>
           <p className="crm-card-title">{r?.nombre || "Equipo"} · <span className="crm-muted">{r?.rol}</span> · <span className="crm-muted">borrador para revisar</span></p>
           <div className="resultado-body">{renderResultado(res.texto || "…")}</div>
+          {!generando && res.texto && <div style={{ marginTop: 10 }}><EncabezadoSelect value={encabezadoId} onChange={setEncabezadoId} etiqueta="🏷️ Encabezado del Word" /></div>}
           {!generando && res.texto && (
             <div className="crm-modal-actions" style={{ flexWrap: "wrap" }}>
               <button className="btn-copy" onClick={() => { navigator.clipboard.writeText(quitarPromptChatGPT(res.texto)); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? "✅ Copiado" : "📋 Copiar"}</button>
               <BotonPromptChatGPT texto={res.texto} />
-              <button className="btn-word" onClick={() => exportarWordContenido(quitarPromptChatGPT(res.texto), `${r?.nombre || "Equipo"} — ${res.pedido.slice(0, 40)}`)}>📄 Descargar Word</button>
+              <button className="btn-word" onClick={() => exportarWordContenido(quitarPromptChatGPT(res.texto), `${r?.nombre || "Equipo"} — ${res.pedido.slice(0, 40)}`, { encabezadoId })}>📄 Descargar Word</button>
               {guardado
                 ? <button className="library-new-btn" onClick={() => onAbrirDoc?.(guardado)}>📄 Abrir (y 📅 programar)</button>
                 : <button className="library-new-btn" onClick={guardar}>💾 Guardar en Mis documentos</button>}

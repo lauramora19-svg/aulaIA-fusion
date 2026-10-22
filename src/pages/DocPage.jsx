@@ -6,6 +6,8 @@ import ProgramarModal from "../components/ProgramarModal";
 import { AccionesSiguientes } from "../lib/acciones";
 import TituloEditable from "../components/TituloEditable";
 import { BotonPromptChatGPT, quitarPromptChatGPT } from "../lib/promptChatGPT";
+import EncabezadoSelect from "../components/EncabezadoSelect";
+import { obtenerEncabezado } from "../lib/encabezados";
 
 export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false }) {
   const [doc, setDoc]     = useState(null);
@@ -15,10 +17,17 @@ export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false })
   const [descargando, setDescargando] = useState(false);
   const [programar, setProgramar] = useState(false);
   const [aviso, setAviso] = useState("");
+  const [encabezado, setEncabezado] = useState(null);
+  useEffect(() => { obtenerEncabezado(doc?.encabezado_id).then(setEncabezado).catch(() => setEncabezado(null)); }, [doc?.encabezado_id]);
+  const cambiarEncabezado = async (id) => {
+    setDoc(d => ({ ...d, encabezado_id: id || null }));
+    const { error } = await supabase.from("programaciones").update({ encabezado_id: id || null }).eq("id", doc.id);
+    if (error) setAviso("No se ha podido guardar el encabezado.");
+  };
 
   const descargarWord = async () => {
     setDescargando(true);
-    try { await exportarWordContenido(doc.contenido, doc.titulo || "Documento AulaIA"); }
+    try { await exportarWordContenido(doc.contenido, doc.titulo || "Documento AulaIA", { encabezadoId: doc.encabezado_id }); }
     catch { alert("No se ha podido generar el Word. Inténtalo de nuevo."); }
     finally { setDescargando(false); }
   };
@@ -81,6 +90,7 @@ export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false })
       </div>
 
       {aviso && <p className="crm-aviso">{aviso}</p>}
+      {!isShared && <div style={{ margin: "0 0 12px" }}><EncabezadoSelect value={doc.encabezado_id || ""} onChange={cambiarEncabezado} etiqueta="🏷️ Encabezado del Word" compacto={false} /></div>}
       {programar && <ProgramarModal doc={doc} onClose={() => setProgramar(false)} onSaved={({ fecha, enAgenda }) => { setProgramar(false); setAviso(`📅 Programado para el ${new Date(fecha + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}${enAgenda ? " (también en tu Agenda docente)" : ""}.`); }} />}
 
       {isShared && (
@@ -90,6 +100,7 @@ export default function DocPage({ docId, onBack, onAbrirDoc, isShared = false })
       )}
 
       <div className="resultado-body" style={{ maxHeight:"none" }}>
+        {encabezado?.imagen && <img src={encabezado.imagen} alt={`Encabezado: ${encabezado.nombre}`} style={{ display: "block", margin: "0 auto 16px", maxWidth: "100%", maxHeight: 110, objectFit: "contain" }} />}
         {renderResultado(doc.contenido || "")}
       </div>
 

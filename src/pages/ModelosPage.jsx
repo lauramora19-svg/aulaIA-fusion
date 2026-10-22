@@ -3,30 +3,10 @@ import { supabase } from "../lib/supabase";
 import { fmtFecha, mensajeError } from "../lib/crm";
 import EmptyState from "../components/EmptyState";
 import Campo from "../components/Campo";
+import { textoDeDocx } from "../lib/docx";
 
 const TIPOS = { informe: "📊 Informe de alumno", acta: "📋 Acta de evaluación / grupo", otro: "📄 Otro" };
 const MAX_MB = 15;
-
-// Extrae el texto de un .docx (Word) en el navegador
-async function textoDeDocx(file) {
-  await new Promise((resolve, reject) => {
-    if (window.JSZip) return resolve();
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
-    s.onload = resolve; s.onerror = reject; document.head.appendChild(s);
-  });
-  const zip = await window.JSZip.loadAsync(file);
-  const xml = await zip.file("word/document.xml")?.async("string");
-  if (!xml) return "";
-  return xml
-    .replace(/<w:tab\/>/g, "\t")
-    .replace(/<\/w:tc>/g, " | ")
-    .replace(/<\/w:tr>/g, "\n")
-    .replace(/<\/w:p>/g, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/\n{3,}/g, "\n\n").trim();
-}
 
 export default function ModelosPage() {
   const [lista, setLista] = useState(null);
