@@ -10,6 +10,9 @@ import EquipoPage from "./pages/EquipoPage";
 import PerfilPage from "./pages/PerfilPage";
 import AdminPage from "./pages/AdminPage";
 import CentroPage from "./pages/CentroPage";
+import AusenciaPage from "./pages/AusenciaPage";
+import AvisosAusencia from "./components/AvisosAusencia";
+import EncabezadoSelect from "./components/EncabezadoSelect";
 import { miCentroInfo } from "./lib/centros";
 import SustitucionesPage from "./pages/SustitucionesPage";
 import SustAvisos from "./components/SustAvisos";
@@ -372,6 +375,7 @@ function Generator({ onSaved, contexto }) {
   const [objetivos, setObjetivos]     = useState([]);
   const [metodologias, setMetodologias] = useState([]);
   const [tipoResultado, setTipoResultado] = useState("");
+  const [encabezadoId, setEncabezadoId] = useState("");
   const [duracion, setDuracion]       = useState("");
   const [loading, setLoading]         = useState(false);
   const [continuando, setContinuando] = useState(false);
@@ -446,6 +450,7 @@ function Generator({ onSaved, contexto }) {
             comunidad, etapa, curso, area, duracion,
             necesidades, num_alumnos:numAlumnos, objetivos,
             comentario, contenido: full, compartido: false,
+            ...(encabezadoId ? { encabezado_id: encabezadoId } : {}),
             ...(ctxClase ? { clase_id: ctxClase.id } : {}), ...(ctxAlumno ? { alumno_id: ctxAlumno.id } : {}),
           }).select("id").single();
           if (inserted?.id) { setSavedDocId(inserted.id); setSavedTitulo(titulo); }
@@ -482,7 +487,7 @@ function Generator({ onSaved, contexto }) {
     setDescargando(true);
     try {
       const tituloDoc = `${TIPOS_RESULTADO[modo]?.find(t=>t.id===tipoResultado)?.label||tipoResultado} — ${area} ${curso}`;
-      await exportarWordContenido(resultado, tituloDoc);
+      await exportarWordContenido(resultado, tituloDoc, { encabezadoId });
     } catch(e) { console.error(e); alert("Error generando el documento."); }
     finally { setDescargando(false); }
   };
@@ -704,6 +709,7 @@ function Generator({ onSaved, contexto }) {
         <div className="form">
           {needsDuracion&&(<section className="card"><StepHeader n={modo==="ordinario"?"12":"14"} title="Duración de la sesión"/><div className="chips-grid">{DURACION_SESION.map(d=><Chip key={d} label={d} selected={duracion===d} onClick={()=>setDuracion(d)} small/>)}</div></section>)}
           {needsSesiones&&(<section className="card"><StepHeader n={modo==="ordinario"?"12":"14"} title="Número de sesiones" sub="¿Cuántas sesiones abarca este documento?"/><div className="chips-grid">{NUM_SESIONES.map(s=><Chip key={s} label={s} selected={duracion===s} onClick={()=>setDuracion(s)} small/>)}</div></section>)}
+          <section className="card"><EncabezadoSelect value={encabezadoId} onChange={setEncabezadoId} etiqueta="🏷️ Encabezado o logo del Word (opcional)"/><p className="field-hint" style={{marginBottom:0}}>Para exámenes, circulares o comunicados: sale arriba en todas las páginas del Word. Puedes subir los de la fundación y del colegio.</p></section>
           <section className="card resumen">
             <h3 className="resumen-title">📋 Resumen de tu aula</h3>
             <div className="resumen-grid">
@@ -822,12 +828,14 @@ export default function App() {
         <main className={`crm-main ${view==="ag"?"crm-main-agenda":""}`}>
           <button className="doc-btn crm-menu-movil" onClick={()=>setMenuMovil(true)}>☰ Menú</button>
           {view==="inicio"    &&<SustAvisos email={session?.user?.email} centro={centro}/>}
+          {view==="inicio"    &&<AvisosAusencia/>}
           {view==="inicio"    &&<HomePage session={session} clases={clases} cargandoClases={cargandoClases} errorClases={errorClases} onAbrirClase={id=>ir("clase",{claseId:id})} onNuevaClase={()=>setClaseModal(true)} onAgenda={()=>ir("agenda")}/>}
           {view==="agenda"    &&<AgendaPage clases={clases} onAbrirDoc={abrirDoc}/>}
           {view==="modelos"   &&<ModelosPage/>}
           {view==="equipo"    &&<EquipoPage clases={clases} onAbrirDoc={abrirDoc}/>}
           {view==="perfil"    &&<PerfilPage/>}
           {view==="admin" && esAdmin &&<AdminPage onCargos={()=>misEtapasSust().then(setSustEtapas)}/>}
+          {view==="ausencia"  &&<AusenciaPage clases={clases} esAdmin={esAdmin} esAdminCentro={esAdminCentro} centro={centro} onCarpeta={()=>ir("ag",{seccion:"sustitucion"})}/>}
           {view==="centro" && esAdminCentro &&<CentroPage centro={centro} onCargos={()=>misEtapasSust().then(setSustEtapas)}/>}
           {view==="sust" && sustEtapas.length>0 &&<SustitucionesPage etapas={sustEtapas} centro={centro}/>}
           {view==="clase"     &&<ClasePage key={params.claseId} claseId={params.claseId} clases={clases} onClasesChanged={async (nuevaId)=>{ await cargarClases(); if (typeof nuevaId === "string") ir("clase",{claseId:nuevaId}); }} onNuevoDocumento={nuevoDocumento} onAbrirAlumno={(id, cid)=>ir("alumno",{alumnoId:id, claseId:cid})} onAbrirDoc={abrirDoc} onEliminada={()=>{cargarClases();ir("inicio");}}/>}
