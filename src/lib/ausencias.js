@@ -34,6 +34,12 @@ export async function avisosEnviados() {
   const { data } = await supabase.from("avisos_ausencia").select("id, para_user, desde, hasta, horario, leido_at, created_at").eq("de_user", user.id).order("created_at", { ascending: false }).limit(40);
   return data || [];
 }
+// Borra una comunicación enviada (por error o de prueba): desaparece también del Inicio del equipo directivo
+export async function borrarAvisos(ids) {
+  const { data, error } = await supabase.from("avisos_ausencia").delete().in("id", ids).select("id");
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("No se ha podido borrar.");
+}
 export const marcarLeido = async (id) => chk(await supabase.from("avisos_ausencia").update({ leido_at: new Date().toISOString() }).eq("id", id));
 
 const f = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
