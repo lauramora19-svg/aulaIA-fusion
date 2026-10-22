@@ -15,7 +15,7 @@ export default function AuthPage() {
 
     if (mode === "login") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMsg({ type: "err", text: "Email o contraseña incorrectos." });
+      if (error) setMsg({ type: "err", text: "Email o contraseña incorrectos. Si todavía no tienes cuenta, pulsa «¿No tienes cuenta? Regístrate»." });
 
     } else if (mode === "register") {
       if (password.length < 8) {
@@ -33,9 +33,11 @@ export default function AuthPage() {
         setMsg({ type: "err", text: "Tu colegio todavía no está dado de alta en AulaIA. Regístrate con el correo de tu centro o pide a tu colegio que se ponga en contacto con AulaIA." });
         setLoading(false); return;
       }
-      const { error } = await supabase.auth.signUp({ email: correo, password });
+      const { data, error } = await supabase.auth.signUp({ email: correo, password });
       if (error) setMsg({ type: "err", text: "Este email ya está registrado o no es válido." });
-      else setMsg({ type: "ok", text: "¡Cuenta creada! Revisa tu email para confirmarla." });
+      // Si la cuenta queda activa al momento, entra directamente; si no, hay que confirmar el correo
+      else if (data?.session) setMsg({ type: "ok", text: "¡Cuenta creada! Entrando en AulaIA…" });
+      else setMsg({ type: "ok", text: "¡Cuenta creada! Ya puedes entrar con tu correo y tu contraseña." });
 
     } else if (mode === "forgot") {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
