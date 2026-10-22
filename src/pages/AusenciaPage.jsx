@@ -4,12 +4,12 @@ import EncabezadoSelect from "../components/EncabezadoSelect";
 import { renderResultado } from "../lib/render";
 import { miPerfil } from "../lib/equipo";
 import { CARGOS, ETAPAS_SUST } from "../lib/sustituciones";
-import { isoDia, redactarConEspecialista, urlGmail, textoPlano } from "../lib/asistencia";
+import { isoDia, redactarConEspecialista, urlGmail } from "../lib/asistencia";
 import { correoInstitucional, guardarCorreoInstitucional } from "../lib/correo";
 import { textoDeDocx } from "../lib/docx";
 import { exportarWordContenido } from "../lib/word";
 import {
-  destinatariosCentro, plantillaAusencia, guardarPlantillaAusencia, enviarAvisos, avisosEnviados,
+  destinatariosCentro, plantillaAusencia, guardarPlantillaAusencia, enviarAvisos, avisosEnviados, borrarAvisos,
   conMotivo, fechasAusencia, MARCA_MOTIVO,
 } from "../lib/ausencias";
 
@@ -120,17 +120,30 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo (puedes usar tablas si e
       const titulo = `Comunicacion de ausencia ${perfil?.nombre || ""} ${desde}`;
       const archivo = await exportarWordContenido(documento, titulo, { encabezadoId: encabezado });
       const para = [...dest.map(d => d.email), ...correosOtros];
-      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivo.trim() ? `\nMotivo: ${motivo.trim()}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nAdjunto el documento.\n\nUn saludo,\n${perfil?.nombre || ""}\n\n----------\n${textoPlano(documento)}`;
+      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivo.trim() ? `\nMotivo: ${motivo.trim()}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia.\n\nUn saludo,\n${perfil?.nombre || ""}`;
       const url = urlGmail({ para, asunto: `Comunicación de ausencia · ${perfil?.nombre || ""} · ${fechasAusencia(desde, hasta)}`, cuerpo, cuenta: correo });
       setGmailUrl(url);
       if (ventana) ventana.location.href = url;
-      setOk(`${dest.length ? `Aviso enviado en AulaIA a ${dest.map(d => d.nombre).join(", ")}. ` : ""}Se ha descargado «${archivo}» y se ha abierto Gmail con el correo preparado: adjunta ese Word y pulsa Enviar.`);
+      setOk(`${dest.length ? `Aviso enviado en AulaIA a ${dest.map(d => d.nombre).join(", ")}. ` : ""}Se ha descargado «${archivo}» y se ha abierto Gmail con un correo corto: arrastra ese Word (está en Descargas) al correo y pulsa Enviar.`);
       avisosEnviados().then(setEnviados);
     } catch (e) { ventana?.close(); setError(e.message || "No se ha podido enviar."); }
     finally { setEnviando(false); }
   };
 
   const nombreDe = (id) => (destinos || []).find(d => d.id === id)?.nombre || "Equipo directivo";
+  // Una fila por envío (aunque vaya a varias personas)
+  const envios = Object.values(enviados.reduce((acc, a) => {
+    const k = `${a.desde}|${a.hasta || ""}|${a.horario || ""}|${(a.created_at || "").slice(0, 16)}`;
+    (acc[k] ||= { ...a, ids: [], para: [], leidos: [] });
+    acc[k].ids.push(a.id); acc[k].para.push(nombreDe(a.para_user)); if (a.leido_at) acc[k].leidos.push(nombreDe(a.para_user));
+    return acc;
+  }, {}));
+  const borrarEnvio = async (e) => {
+    if (!window.confirm(`¿Borrar la comunicación de ausencia ${fechasAusencia(e.desde, e.hasta)}?\n\nDesaparecerá también del Inicio de ${e.para.join(", ")}. Si ya enviaste el correo, ese no se puede retirar desde aquí.`)) return;
+    setError(""); setOk("");
+    try { await borrarAvisos(e.ids); setOk("Comunicación borrada."); avisosEnviados().then(setEnviados); }
+    catch (err) { setError(err.message); }
+  };
 
   return (
     <div className="crm-page">
@@ -225,14 +238,15 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo (puedes usar tablas si e
           <p className="crm-card-title">Comunicaciones enviadas</p>
           <div className="crm-table-wrap">
             <table className="crm-table">
-              <thead><tr><th>Ausencia</th><th>Para</th><th>Enviada</th><th>Estado</th></tr></thead>
+              <thead><tr><th>Ausencia</th><th>Para</th><th>Enviada</th><th>Estado</th><th></th></tr></thead>
               <tbody>
-                {enviados.map(a => (
-                  <tr key={a.id}>
-                    <td>{fechasAusencia(a.desde, a.hasta)}{a.horario ? ` · ${a.horario}` : ""}</td>
-                    <td>{nombreDe(a.para_user)}</td>
-                    <td className="crm-nowrap">{new Date(a.created_at).toLocaleDateString("es-ES")}</td>
-                    <td>{a.leido_at ? "✔ Leído" : <span className="crm-muted">Sin leer</span>}</td>
+                {envios.map(e => (
+                  <tr key={e.ids[0]}>
+                    <td>{fechasAusencia(e.desde, e.hasta)}{e.horario ? ` · ${e.horario}` : ""}</td>
+                    <td>{e.para.join(", ")}</td>
+                    <td className="crm-nowrap">{new Date(e.created_at).toLocaleDateString("es-ES")}</td>
+                    <td>{e.leidos.length ? `✔ Leído${e.para.length > 1 ? ` por ${e.leidos.join(", ")}` : ""}` : <span className="crm-muted">Sin leer</span>}</td>
+                    <td><button className="doc-btn doc-btn-del" onClick={() => borrarEnvio(e)} title="Borrar esta comunicación">🗑️</button></td>
                   </tr>
                 ))}
               </tbody>
