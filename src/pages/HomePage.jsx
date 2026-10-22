@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { saludo, fmtFecha, fmtHora, sumarDias, TIPOS_EVENTO } from "../lib/crm";
+import { estadoAgenda, leerAgenda, sesionesAgenda, suscribirAgenda } from "../lib/agenda";
 
 export default function HomePage({ session, clases, cargandoClases, errorClases, onAbrirClase, onNuevaClase, onAgenda }) {
   const [stats, setStats] = useState({});
@@ -27,13 +28,27 @@ export default function HomePage({ session, clases, cargandoClases, errorClases,
     })();
   }, [clases]);
 
+  // Lo del Calendario de AulaIA y, además, las sesiones planificadas en el Horario semanal (Agenda)
+  const [conectada, setConectada] = useState(estadoAgenda().conectada);
+  useEffect(() => suscribirAgenda(e => setConectada(e.conectada)), []);
   useEffect(() => {
-    const desde = new Date(); desde.setHours(0, 0, 0, 0);
-    supabase.from("agenda_eventos").select("*")
-      .gte("inicio", desde.toISOString()).lt("inicio", sumarDias(desde, 7).toISOString())
-      .order("inicio").limit(8)
-      .then(({ data }) => setEventos(data || []));
-  }, []);
+    (async () => {
+      const desde = new Date(); desde.setHours(0, 0, 0, 0);
+      const hasta = sumarDias(desde, 7);
+      const { data } = await supabase.from("agenda_eventos").select("*")
+        .gte("inicio", desde.toISOString()).lt("inicio", hasta.toISOString()).order("inicio");
+      let lista = data || [];
+      if (conectada) {
+        try {
+          const st = await leerAgenda();
+          const yaEstan = new Set(lista.filter(e => e.agenda_ref).map(e => `${e.agenda_ref.week}-${e.agenda_ref.key}`));
+          const ag = sesionesAgenda(st, desde, hasta).filter(e => !yaEstan.has(`${e.ref.week}-${e.ref.key}`));
+          lista = [...lista, ...ag].sort((a, b) => new Date(a.inicio) - new Date(b.inicio));
+        } catch { /* sin Agenda */ }
+      }
+      setEventos(lista.slice(0, 12));
+    })();
+  }, [conectada]);
 
   return (
     <div className="crm-page">
@@ -120,7 +135,9 @@ export default function HomePage({ session, clases, cargandoClases, errorClases,
               <div key={ev.id} className="crm-evento" style={{ borderLeftColor: t.color }} onClick={onAgenda}>
                 <span className="crm-evento-hora">{fmtFecha(ev.inicio, { weekday: "short", day: "2-digit", month: "short" })} · {fmtHora(ev.inicio)}</span>
                 <span className="crm-evento-titulo">{t.emoji} {ev.titulo}</span>
-                {c && <span className="crm-evento-meta">{c.nombre}</span>}
+                {ev.origen === "agenda"
+                  ? <span className="crm-evento-meta">🗓️ {[ev.grupo, ev.asignatura].filter(Boolean).join(" · ") || "Horario semanal"}</span>
+                  : c && <span className="crm-evento-meta">{c.nombre}{c.area ? ` · ${c.area}` : ""}</span>}
               </div>
             );
           })}
