@@ -21,6 +21,7 @@ export default function Sidebar({ esAdmin, esAdminCentro, esDirectivo, view, sec
           {ag("horario", "🗓️", "Horario semanal")}
           {ag("anual", "📆", "Vista anual")}
           {item("agenda", "📅", "Calendario")}
+          {item("ausencia", "📨", "Comunicar mi ausencia")}
         </nav>
 
         <p className="crm-side-title">Mis clases</p>
