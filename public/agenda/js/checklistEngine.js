@@ -244,8 +244,19 @@ class ChecklistEngine {
 
     const docs = (window.store.state.documents || []).filter(d => d.groupLabel === activeClass.groupLabel);
     const roster = window.clasesEngine.studentsForClass(activeClass);
+    const antiguos = this.documentosCursoPasado();
 
     el.innerHTML = `
+      ${antiguos.length ? `
+        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; background: var(--accent-light); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 0.9rem; margin-bottom: 0.85rem; font-size: 0.85rem; color: var(--text-primary);">
+          <i class="fa-solid fa-shield-halved" style="color: var(--accent-primary);"></i>
+          <span style="flex: 1;">Tienes <strong>${antiguos.length}</strong> ${antiguos.length === 1 ? 'documento' : 'documentos'} del curso pasado (autorizaciones con datos de las familias). Lo recomendable es no guardarlos más de lo necesario.</span>
+          <button class="btn btn-outline" onclick="window.checklistEngine.borrarCursoPasado()" style="padding: 6px 10px;">
+            <i class="fa-solid fa-trash"></i> Borrarlos
+          </button>
+        </div>
+      ` : ''}
+      <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.6rem;"><i class="fa-solid fa-lock"></i> Solo los ves tú: el archivo es privado y se abre con un enlace que caduca a los 5 minutos. Al acabar el curso te avisaremos para borrarlos.</p>
       <div style="display: flex; justify-content: flex-end; margin-bottom: 0.85rem;">
         <button class="btn btn-secondary" onclick="window.checklistEngine.openUploadDocumentModal()">
           <i class="fa-solid fa-upload"></i> Subir documento
@@ -349,6 +360,29 @@ class ChecklistEngine {
       return;
     }
     window.open(data.signedUrl, '_blank');
+  }
+
+  // Documentos subidos antes del 1 de julio que cerró el último curso (el curso acaba el 30 de junio)
+  documentosCursoPasado() {
+    const hoy = new Date();
+    const corte = new Date(hoy.getMonth() >= 6 ? hoy.getFullYear() : hoy.getFullYear() - 1, 6, 1);
+    return (window.store.state.documents || []).filter(d => d.uploadedAt && new Date(d.uploadedAt) < corte);
+  }
+
+  // Nunca se borra solo: lo decide la docente con un clic (y confirmación)
+  async borrarCursoPasado() {
+    const antiguos = this.documentosCursoPasado();
+    if (!antiguos.length) return;
+    if (!confirm(`¿Borrar ${antiguos.length} ${antiguos.length === 1 ? 'documento' : 'documentos'} del curso pasado de todos tus grupos? No se podrá deshacer.`)) return;
+    if (window.sb) {
+      const rutas = antiguos.map(d => d.storagePath).filter(Boolean);
+      for (let i = 0; i < rutas.length; i += 100) await window.sb.storage.from('documentos-alumnado').remove(rutas.slice(i, i + 100));
+    }
+    const ids = new Set(antiguos.map(d => d.id));
+    window.store.state.documents = (window.store.state.documents || []).filter(d => !ids.has(d.id));
+    window.store.saveState();
+    this.renderListadosView();
+    window.app.showToast('Documentos del curso pasado borrados.', 'info');
   }
 
   async deleteDocument(docId) {
