@@ -15,6 +15,7 @@ export default async function handler(req) {
     metodologias = [], continuarDesde = null,
     plantillaId = null, accessToken = null,
     especialistaId = null, grupoTexto = "", contextoEncargo = "",
+    archivos = [],
   } = await req.json();
 
   // ── CUENTA, LÍMITE MENSUAL Y REGISTRO DE USO ─────────────────────────────
@@ -501,6 +502,14 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
         }
       }
     } catch {}
+  }
+  // Fotos o PDF que el docente adjunta al encargo (p. ej. exámenes para que Rosa los corrija)
+  if (!continuarDesde && Array.isArray(archivos)) {
+    archivos.slice(0, 12).forEach(a => {
+      if (!a?.data || typeof a.data !== "string") return;
+      if (a.tipo === "pdf") adjuntos.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } });
+      else if (a.tipo === "imagen") adjuntos.push({ type: "image", source: { type: "base64", media_type: /^image\/(jpeg|png|webp|gif)$/.test(a.mediaType || "") ? a.mediaType : "image/jpeg", data: a.data } });
+    });
   }
 
   // ── ESPECIALISTA DEL EQUIPO DOCENTE (versión fusionada) ────────────────────
