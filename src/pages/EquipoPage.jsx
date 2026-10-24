@@ -6,6 +6,7 @@ import { renderResultado } from "../lib/render";
 import { exportarWordContenido } from "../lib/word";
 import { BotonPromptChatGPT, quitarPromptChatGPT } from "../lib/promptChatGPT";
 import EncabezadoSelect from "../components/EncabezadoSelect";
+import { prepararAdjunto, pesoTotal, MAX_TOTAL } from "../lib/adjuntos";
 import Modal from "../components/Modal";
 import Campo from "../components/Campo";
 
@@ -18,6 +19,7 @@ const EJEMPLOS = [
 // Pases entre especialistas (como en sus instrucciones)
 const PASES = {
   arturo: ["eva", "Pasar a Eva: crear su rúbrica", "A partir de esta actividad de Arturo, crea el instrumento de evaluación (rúbrica o lista de cotejo) adecuado."],
+  rosa: ["carmen", "Pasar a Carmen: mensaje para las familias", "A partir de esta corrección de Rosa, redacta un mensaje breve y cálido para la familia de cada alumno (usa su número de lista), con lo que ha hecho bien y una idea sencilla para practicar en casa."],
   eva: ["carmen", "Pasar a Carmen: explicarlo a las familias", "A partir de este instrumento de evaluación, redacta un mensaje breve para las familias explicando qué se va a evaluar y cómo pueden ayudar en casa."],
 };
 
@@ -33,6 +35,9 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
   const [guardado, setGuardado] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [encabezadoId, setEncabezadoId] = useState("");
+  const [archivos, setArchivos] = useState([]); // fotos o PDF del encargo
+  const [leyendo, setLeyendo] = useState(false);
+  const adjRef = useRef(null);
   const [editar, setEditar] = useState(null); // especialista en edición (admin)
   const ctrl = useRef(null);
 
@@ -40,7 +45,9 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
   const cargar = async (admin) => setEquipo(await listarEspecialistas(admin));
   useEffect(() => { miPerfil().then(p => { setPerfil(p); cargar(p?.rol === "admin"); }); }, []);
 
-  const auto = repartir(texto, equipo.filter(e => e.activo !== false));
+  const autoTexto = repartir(texto, equipo.filter(e => e.activo !== false));
+  // Con fotos adjuntas y sin otra pista en el texto, lo normal es corregir: Rosa
+  const auto = autoTexto === "coordinadora" && archivos.length && equipo.some(e => e.id === "rosa" && e.activo !== false) ? "rosa" : autoTexto;
   const elegido = manual || auto;
   const porId = (id) => equipo.find(e => e.id === id);
 
@@ -51,16 +58,32 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
     try {
       const clase = clases.find(c => c.id === claseId) || null;
       const grupoTexto = await resumenGrupo(clase);
-      const prompt = `ENCARGO:\n${pedido.trim()}${previo ? `\n\nMATERIAL DE PARTIDA (de otro especialista del equipo):\n${previo.slice(0, 12000)}` : ""}\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
+      const adj = previo ? [] : archivos;
+      const prompt = `ENCARGO:\n${pedido.trim()}${adj.length ? `\n\n(Se adjuntan ${adj.length} ${adj.length === 1 ? "archivo" : "archivos"}: ${adj.map(a => a.nombre).join(", ")}.)` : ""}${previo ? `\n\nMATERIAL DE PARTIDA (de otro especialista del equipo):\n${previo.slice(0, 12000)}` : ""}\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
       const r = await fetch("/api/generar", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.current.signal,
-        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase).catch(() => "") : "", accessToken: await tokenActual(), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
+        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase).catch(() => "") : "", accessToken: await tokenActual(), archivos: adj.map(({ tipo, mediaType, data }) => ({ tipo, mediaType, data })), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
       });
       if (!r.ok) throw new Error("No se pudo generar. Inténtalo de nuevo.");
       let full = "";
       await leerStreamSSE(r, (d) => { full += d; setRes({ espId, texto: full, pedido }); }, ctrl.current.signal);
     } catch (e) { if (e.name !== "AbortError") setError(e.message); }
     finally { setGenerando(false); }
+  };
+
+  const adjuntar = async (files) => {
+    const lista = [...(files || [])];
+    if (!lista.length) return;
+    setError(""); setLeyendo(true);
+    try {
+      const nuevos = [];
+      for (const f of lista) nuevos.push(await prepararAdjunto(f));
+      const todos = [...archivos, ...nuevos];
+      if (todos.length > 12) throw new Error("Como máximo 12 archivos por encargo. Si son más, hazlo en varias tandas.");
+      if (pesoTotal(todos) > MAX_TOTAL) throw new Error("Son demasiadas fotos para un solo envío. Prueba con menos (unas 8) y haz el resto en otra tanda.");
+      setArchivos(todos);
+    } catch (e) { setError(e.message); }
+    finally { setLeyendo(false); if (adjRef.current) adjRef.current.value = ""; }
   };
 
   const guardar = async () => {
@@ -97,6 +120,18 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
         <Campo label="¿Qué necesitas?">
           <textarea className="input-tema" rows={3} value={texto} onChange={e => { setTexto(e.target.value); setManual(null); }} placeholder="Ej.: un juego para repasar la letra P en 20 minutos" />
         </Campo>
+        <div className="chips-grid" style={{ alignItems: "center" }}>
+          <button type="button" className="doc-btn" onClick={() => adjRef.current?.click()} disabled={leyendo}>{leyendo ? "⏳ Preparando…" : "📎 Adjuntar fotos o PDF"}</button>
+          <input ref={adjRef} type="file" accept="image/*,.heic,.heif,application/pdf" multiple hidden onChange={e => adjuntar(e.target.files)} />
+          {archivos.map((a, i) => (
+            <span key={i} className="chip chip-small" title={a.nombre}>
+              {a.miniatura ? <img src={a.miniatura} alt="" style={{ width: 22, height: 22, objectFit: "cover", borderRadius: 4 }} /> : "📄"}
+              <span className="chip-label" style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.nombre}</span>
+              <button type="button" className="btn-back-sm" onClick={() => setArchivos(l => l.filter((_, j) => j !== i))} aria-label={`Quitar ${a.nombre}`}>✕</button>
+            </span>
+          ))}
+          {!archivos.length && <span className="crm-muted" style={{ fontSize: 12 }}>Por ejemplo, fotos de exámenes o fichas para que Rosa los corrija.</span>}
+        </div>
         <div className="chips-grid">{EJEMPLOS.map(t => <button key={t} type="button" className="chip chip-small" onClick={() => { setTexto(t); setManual(null); }}>{t}</button>)}</div>
         <div className="chips-grid">
           <span className="crm-muted">Lo llevará:</span>
