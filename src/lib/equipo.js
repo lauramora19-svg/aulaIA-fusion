@@ -62,10 +62,15 @@ export function leerMdSubagente(texto) {
 }
 
 // Reparto automático por palabras clave; si no encaja ninguno → coordinadora
+// (si encajan varios, gana la palabra clave más larga: «corrige estas fichas» → Rosa, no Arturo)
 export function repartir(texto, lista) {
   const t = (texto || "").toLowerCase();
-  const m = lista.find(e => e.id !== "coordinadora" && (e.claves || []).some(k => k && t.includes(k.toLowerCase())));
-  return m?.id || "coordinadora";
+  let mejor = null, largo = 0;
+  lista.forEach(e => {
+    if (e.id === "coordinadora") return;
+    (e.claves || []).forEach(k => { const kk = (k || "").toLowerCase(); if (kk && t.includes(kk) && kk.length > largo) { mejor = e; largo = kk.length; } });
+  });
+  return mejor?.id || "coordinadora";
 }
 
 // Resumen del grupo para los especialistas: sin nombres, solo datos de aula
