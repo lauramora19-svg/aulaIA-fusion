@@ -43,6 +43,7 @@ export default function InstalarApp({ onHecho }) {
       <button className="btn-back-sm" onClick={instalar}>📲 Instalar AulaIA como app</button>
       {ayuda && (
         <Modal titulo="📲 Instalar AulaIA" onClose={() => { setAyuda(false); onHecho?.(); }}>
+          <p style={{ marginTop: 0 }}><strong>Este navegador no deja instalar apps con un botón de la web</strong>: se hace desde su propio menú, en dos pasos. Cierra esta ventana y sigue estos pasos:</p>
           {esIOS() ? (
             <ol style={{ lineHeight: 1.7, paddingLeft: 20 }}>
               <li>Abre AulaIA en <strong>Safari</strong> (en Chrome del iPhone no se puede).</li>
@@ -58,11 +59,12 @@ export default function InstalarApp({ onHecho }) {
           ) : (
             <ol style={{ lineHeight: 1.7, paddingLeft: 20 }}>
               <li>Abre AulaIA en <strong>Chrome</strong> (o Edge).</li>
-              <li>Pulsa el menú <strong>⋮</strong> (arriba a la derecha).</li>
+              <li>Pulsa el icono de instalar (una pantalla con una flecha ⤓) a la derecha de la barra de direcciones o, si no aparece, el menú <strong>⋮</strong> (arriba a la derecha).</li>
               <li>Elige <strong>«Instalar AulaIA»</strong> o <strong>«Añadir a pantalla de inicio»</strong>. En ordenador: <strong>«Enviar, guardar y compartir → Instalar página como aplicación»</strong>.</li>
             </ol>
           )}
           <p className="crm-muted" style={{ marginBottom: 0 }}>Es la misma AulaIA, con su icono y a pantalla completa. Se actualiza sola: no hay que descargar nada más.</p>
+          <div className="crm-modal-actions"><span style={{ flex: 1 }} /><button className="library-new-btn" onClick={() => { setAyuda(false); onHecho?.(); }}>Entendido</button></div>
         </Modal>
       )}
     </>
