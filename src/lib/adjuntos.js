@@ -23,7 +23,7 @@ export async function prepararAdjunto(file) {
   if (/\.docx$/i.test(file.name)) {
     const texto = (await textoDeDocx(file).catch(() => "")).trim();
     if (!texto) throw new Error(`No se ha podido leer «${file.name}». Ábrelo en Word y guárdalo de nuevo como .docx, o expórtalo a PDF.`);
-    return { nombre: file.name, tipo: "texto", mediaType: "text/plain", data: texto.slice(0, 80000) };
+    return { nombre: file.name, tipo: "texto", mediaType: "text/plain", data: texto.slice(0, 80000), largo: texto.length > 45000, recortado: texto.length > 80000 };
   }
   if (/\.doc$/i.test(file.name)) throw new Error(`«${file.name}» es un Word antiguo (.doc). Ábrelo en Word y guárdalo como .docx o PDF.`);
   if (/\.(txt|md)$/i.test(file.name)) return { nombre: file.name, tipo: "texto", mediaType: "text/plain", data: (await file.text()).slice(0, 80000) };
