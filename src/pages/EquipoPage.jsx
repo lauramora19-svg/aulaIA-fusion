@@ -9,6 +9,7 @@ import EncabezadoSelect from "../components/EncabezadoSelect";
 import { prepararAdjunto, pesoTotal, MAX_TOTAL } from "../lib/adjuntos";
 import Modal from "../components/Modal";
 import Campo from "../components/Campo";
+import { ordenarAlumnos, nombreCompleto } from "../lib/crm";
 
 const EJEMPLOS = [
   "Un juego para repasar la letra P en 20 minutos",
@@ -27,6 +28,10 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
   const [perfil, setPerfil] = useState(null);
   const [equipo, setEquipo] = useState([]);
   const [claseId, setClaseId] = useState("");
+  const [alumnos, setAlumnos] = useState([]);   // alumnado del grupo elegido
+  const [alumnoId, setAlumnoId] = useState(""); // alumno/a concreto (opcional)
+  const [cambios, setCambios] = useState("");   // lo que la docente quiere modificar del resultado
+  const [anterior, setAnterior] = useState(null); // versión antes de revisar (para volver)
   const [texto, setTexto] = useState("");
   const [manual, setManual] = useState(null);
   const [res, setRes] = useState(null); // { espId, texto, pedido }
@@ -44,6 +49,15 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
   const esAdmin = perfil?.rol === "admin";
   const cargar = async (admin) => setEquipo(await listarEspecialistas(admin));
   useEffect(() => { miPerfil().then(p => { setPerfil(p); cargar(p?.rol === "admin"); }); }, []);
+  // Al elegir grupo, su alumnado (para poder elegir un alumno/a concreto, tenga o no NEAE)
+  useEffect(() => {
+    setAlumnoId("");
+    const c = clases.find(x => x.id === claseId);
+    if (!c) { setAlumnos([]); return; }
+    let q = supabase.from("alumnos").select("*");
+    q = c.grupo_id ? q.eq("grupo_id", c.grupo_id) : q.eq("clase_id", c.id);
+    q.then(({ data }) => setAlumnos(ordenarAlumnos(data || [])));
+  }, [claseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const autoTexto = repartir(texto, equipo.filter(e => e.activo !== false));
   // Con fotos adjuntas y sin otra pista en el texto, lo normal es corregir: Rosa
@@ -53,22 +67,54 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
 
   const pedir = async (espId = elegido, pedido = texto, previo = "") => {
     if (!pedido.trim()) { setError("Escribe qué necesitas."); return; }
-    setError(""); setGuardado(null); setGenerando(true); setRes({ espId, texto: "", pedido });
+    setError(""); setGuardado(null); setAnterior(null); setCambios(""); setGenerando(true); setRes({ espId, texto: "", pedido });
     ctrl.current = new AbortController();
     try {
       const clase = clases.find(c => c.id === claseId) || null;
-      const grupoTexto = await resumenGrupo(clase);
+      const alumno = alumnos.find(a => a.id === alumnoId) || null;
+      const grupoTexto = await resumenGrupo(clase, alumno);
       const adj = previo ? [] : archivos;
       const prompt = `ENCARGO:\n${pedido.trim()}${adj.length ? `\n\n(Se adjuntan ${adj.length} ${adj.length === 1 ? "archivo" : "archivos"}: ${adj.map(a => a.nombre).join(", ")}.)` : ""}${previo ? `\n\nMATERIAL DE PARTIDA (de otro especialista del equipo):\n${previo.slice(0, 12000)}` : ""}\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
       const r = await fetch("/api/generar", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.current.signal,
-        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase).catch(() => "") : "", accessToken: await tokenActual(), archivos: adj.map(({ tipo, mediaType, data }) => ({ tipo, mediaType, data })), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
+        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase, alumno).catch(() => "") : "", accessToken: await tokenActual(), archivos: adj.map(({ tipo, mediaType, data }) => ({ tipo, mediaType, data })), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
       });
       if (!r.ok) throw new Error("No se pudo generar. Inténtalo de nuevo.");
       let full = "";
       await leerStreamSSE(r, (d) => { full += d; setRes({ espId, texto: full, pedido }); }, ctrl.current.signal);
     } catch (e) { if (e.name !== "AbortError") setError(e.message); }
     finally { setGenerando(false); }
+  };
+
+  // Revisar el resultado: el mismo especialista lo rehace con los cambios que pide la docente
+  const revisar = async () => {
+    if (!res?.texto || !cambios.trim()) { setError("Escribe qué quieres cambiar."); return; }
+    const espId = res.espId, pedido = res.pedido, previa = res.texto;
+    setError(""); setAnterior(previa); setGenerando(true); setRes({ espId, texto: "", pedido });
+    ctrl.current = new AbortController();
+    try {
+      const clase = clases.find(c => c.id === claseId) || null;
+      const alumno = alumnos.find(a => a.id === alumnoId) || null;
+      const prompt = `ENCARGO ORIGINAL:\n${pedido.trim()}\n\nDOCUMENTO QUE PREPARASTE:\n${previa.replace(/\n?---\n?✅ Documento completo generado por AulaIA\s*$/, "").slice(0, 30000)}\n\nCAMBIOS QUE PIDE EL/LA DOCENTE:\n${cambios.trim()}\n\nRevisa el documento aplicando esos cambios. Devuelve el documento COMPLETO ya corregido (no solo las partes cambiadas) y deja igual todo lo demás. No expliques los cambios: escribe solo el documento.\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
+      const r = await fetch("/api/generar", {
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.current.signal,
+        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto: await resumenGrupo(clase, alumno), contextoEncargo: clase ? await contextoEncargo(clase, alumno).catch(() => "") : "", accessToken: await tokenActual(), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
+      });
+      if (!r.ok) throw new Error("No se pudo revisar. Inténtalo de nuevo.");
+      let full = "";
+      await leerStreamSSE(r, (d) => { full += d; setRes({ espId, texto: full, pedido }); }, ctrl.current.signal);
+      setCambios("");
+      if (guardado && full) await supabase.from("programaciones").update({ contenido: full }).eq("id", guardado);
+    } catch (e) {
+      if (e.name !== "AbortError") setError(e.message);
+      setRes({ espId, texto: previa, pedido }); setAnterior(null);
+    } finally { setGenerando(false); }
+  };
+  const volverAnterior = async () => {
+    if (!anterior) return;
+    setRes(r0 => ({ ...r0, texto: anterior }));
+    if (guardado) await supabase.from("programaciones").update({ contenido: anterior }).eq("id", guardado);
+    setAnterior(null);
   };
 
   const adjuntar = async (files) => {
@@ -91,7 +137,7 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
     const esp = porId(res.espId);
     const { data, error } = await supabase.from("programaciones").insert({
       user_id: user.id, titulo: `${esp?.nombre || "Equipo"} — ${res.pedido.slice(0, 70)}`, modo: "ordinario", tipo_resultado: "encargo",
-      contenido: res.texto, compartido: false, ...(encabezadoId ? { encabezado_id: encabezadoId } : {}), ...(claseId ? { clase_id: claseId } : {}),
+      contenido: res.texto, compartido: false, ...(encabezadoId ? { encabezado_id: encabezadoId } : {}), ...(claseId ? { clase_id: claseId } : {}), ...(alumnoId ? { alumno_id: alumnoId } : {}),
     }).select("id").single();
     if (error) setError(error.message); else setGuardado(data.id);
   };
@@ -116,6 +162,14 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
               {clases.map(c => <option key={c.id} value={c.id}>{c.grupo_nombre || c.nombre}{c.area ? ` · ${c.area}` : ""}</option>)}
             </select>
           </Campo>
+          {claseId && (
+            <Campo label="Alumno/a (opcional)" hint="Elígelo si el encargo es sobre un alumno concreto (tutoría, informe…): el equipo tendrá su ficha completa, tenga o no NEAE.">
+              <select className="input-tema" value={alumnoId} onChange={e => setAlumnoId(e.target.value)}>
+                <option value="">— Todo el grupo —</option>
+                {alumnos.map(a => <option key={a.id} value={a.id}>{nombreCompleto(a)}{a.tiene_nee ? " · NEAE" : ""}</option>)}
+              </select>
+            </Campo>
+          )}
         </div>
         <Campo label="¿Qué necesitas?">
           <textarea className="input-tema" rows={3} value={texto} onChange={e => { setTexto(e.target.value); setManual(null); }} placeholder="Ej.: un juego para repasar la letra P en 20 minutos" />
@@ -162,6 +216,18 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
                 ? <button className="library-new-btn" onClick={() => onAbrirDoc?.(guardado)}>📄 Abrir (y 📅 programar)</button>
                 : <button className="library-new-btn" onClick={guardar}>💾 Guardar en Mis documentos</button>}
               {pase && <button className="doc-btn" onClick={() => { setManual(pase[0]); pedir(pase[0], pase[2], res.texto); }}>{pase[1]}</button>}
+            </div>
+          )}
+          {!generando && res.texto && (
+            <div className="card" style={{ marginTop: 12, background: "#f8fafc" }}>
+              <Campo label={`✏️ Revisar: ¿qué quieres que cambie ${r?.nombre || "el equipo"}?`} hint={guardado ? "Si ya lo has guardado, la versión revisada sustituye a la guardada." : "Puedes revisarlo tantas veces como quieras antes de guardarlo."}>
+                <textarea className="input-tema" rows={3} value={cambios} onChange={e => setCambios(e.target.value)} placeholder="Ej.: hazlo más breve, añade un apartado de acuerdos con la familia, quita la parte de las notas…" />
+              </Campo>
+              <div className="crm-modal-actions">
+                {anterior && <button className="btn-back" onClick={volverAnterior}>↩ Volver a la versión anterior</button>}
+                <span style={{ flex: 1 }} />
+                <button className="generate-btn generate-active" onClick={revisar} disabled={!cambios.trim()}>✏️ Revisar con estos cambios</button>
+              </div>
             </div>
           )}
         </section>
