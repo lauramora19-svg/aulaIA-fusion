@@ -151,13 +151,28 @@ export async function contextoEncargo(clase, alumno = null) {
   }
   const agenda = await leerAgendaAlumnos();
   if (alumno) {
-    partes.push(`ESTE DOCUMENTO ES PARA UN ALUMNO/A CONCRETO:\n${fichaAlumno(alumno, agenda, true)}`);
+    partes.push(`ESTE DOCUMENTO ES PARA UN ALUMNO/A CONCRETO (tienes acceso a su ficha, tenga o no NEAE; úsala):\n${fichaAlumno(alumno, agenda, true)}`);
+    // Seguimiento registrado por la docente (observaciones, logros, dificultades)
+    try {
+      const { data: seg } = await supabase.from("seguimiento").select("fecha, tipo, texto").eq("alumno_id", alumno.id).order("fecha", { ascending: false }).limit(12);
+      if (seg?.length) partes.push(`SEGUIMIENTO DE ${iniciales(alumno)} (más reciente primero):\n${seg.map(s => `- ${s.fecha} · ${s.tipo}: ${corta(s.texto, 300)}`).join("\n")}`);
+    } catch { /* sin seguimiento */ }
+    // Asistencia de los últimos 90 días
+    try {
+      const d = new Date(); d.setDate(d.getDate() - 90);
+      const { data: as } = await supabase.from("asistencia").select("fecha, estado").eq("alumno_id", alumno.id).gte("fecha", d.toISOString().slice(0, 10));
+      if (as?.length) {
+        const n = (e) => as.filter(x => x.estado === e).length;
+        partes.push(`ASISTENCIA DE ${iniciales(alumno)} (últimos 90 días): ${n("falta")} faltas, ${n("justificada")} justificadas, ${n("retraso")} retrasos.`);
+      }
+    } catch { /* sin asistencia */ }
   } else if (clase) {
     let q = supabase.from("alumnos").select("nombre, apellidos, tiene_nee, perfil_nee, notas, agenda_student_id");
     q = clase.grupo_id ? q.eq("grupo_id", clase.grupo_id) : q.eq("clase_id", clase.id);
     const { data } = await q;
     const conNee = (data || []).filter(a => a.tiene_nee).sort((a, b) => iniciales(a).localeCompare(iniciales(b), "es"));
     if (conNee.length) partes.push(`ALUMNADO CON NEAE DEL GRUPO (incluye adaptaciones concretas para cada uno, citándolos solo por sus iniciales):\n${conNee.map(a => fichaAlumno(a, agenda, false)).join("\n")}`);
+    partes.push("Si el encargo es sobre un alumno/a concreto cuya ficha no aparece aquí, no digas que no puedes acceder a sus datos: prepara el documento con lo que te hayan contado y añade al principio una línea indicando que, para tener su ficha completa, la docente debe elegirlo en «Alumno/a».");
   }
   return partes.join("\n\n").slice(0, 10000);
 }
