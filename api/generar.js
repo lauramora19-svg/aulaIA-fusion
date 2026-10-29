@@ -83,7 +83,11 @@ export default async function handler(req) {
     "Galego": "gallego",
   };
 
+  // En Infantil se llaman «rincones»; en Primaria y Secundaria, «estaciones de aprendizaje»
+  const esInfantil = /infantil/i.test(String(etapa || "")) || /infantil/i.test(String(curso || ""));
+  const NOMBRE_RINCONES = esInfantil ? "rincones de aprendizaje" : "estaciones de aprendizaje";
   const TIPO_MAP = {
+    rincones: esInfantil ? "propuesta completa de trabajo por rincones de aprendizaje" : "circuito completo de estaciones de aprendizaje (rotación por estaciones)",
     actividades:"batería de actividades adaptadas paso a paso",
     programacion:"programación didáctica adaptada",
     aci:"Adaptación Curricular Individualizada (ACI) en formato oficial según la LOMLOE",
@@ -101,13 +105,19 @@ export default async function handler(req) {
     mixto_plan:"Plan de Inclusión del Aula con estrategias para atender simultáneamente a todo el alumnado",
   };
 
-  const TIPOS_LARGOS = ["aci","pti","situacion","mixto_situacion","mixto_programacion","dua","mixto_dua","programacion"];
+  const TIPOS_LARGOS = ["rincones", "aci","pti","situacion","mixto_situacion","mixto_programacion","dua","mixto_dua","programacion"];
 
   const necesidadesLabels = necesidades.map(id => NECESIDADES_MAP[id] || id).join(", ");
   const objetivosLabels = objetivos.length > 0 ? objetivos.join(", ") : "los propios de la etapa y área";
   const tipoLabel = TIPO_MAP[tipoResultado] || tipoResultado;
   const idiomaLabel = IDIOMA_MAP[idioma] || "español (castellano)";
-  const metodologiasLabel = metodologias.length > 0 ? metodologias.join(", ") : null;
+  const METODO_MAP = {
+    abj: "Aprendizaje Basado en el Juego", tbl: "Aprendizaje Basado en el Pensamiento", abp_prob: "Aprendizaje Basado en Problemas",
+    abp_proy: "Aprendizaje Basado en Proyectos", cooperativo: "Aprendizaje Cooperativo", design: "Design Thinking",
+    flipped: "Flipped Classroom (clase invertida)", gamificacion: "Gamificación", talleres: "Talleres",
+    rincones: esInfantil ? "Trabajo por rincones de aprendizaje" : "Estaciones de aprendizaje (rotación por estaciones)",
+  };
+  const metodologiasLabel = metodologias.length > 0 ? metodologias.map(m => METODO_MAP[m] || m).join(", ") : null;
   const esDocumentoLargo = TIPOS_LARGOS.includes(tipoResultado);
 
   // ── BÚSQUEDA EN SUPABASE ──────────────────────────────────────────────────
@@ -269,6 +279,37 @@ Para CADA actividad desarrolla completamente:
 - Medidas ordinarias para todo el grupo
 - Adaptaciones para alumnado con NEE
 - Enriquecimiento para altas capacidades`;
+  const ESTRUCTURA_RINCONES = `
+ESTRUCTURA DE LA PROPUESTA DE ${NOMBRE_RINCONES.toUpperCase()} — usa siempre el término «${esInfantil ? "rincón / rincones" : "estación / estaciones"}» (es el propio de ${esInfantil ? "Educación Infantil" : "esta etapa"}) y completa TODAS estas secciones:
+
+## 1. IDENTIFICACIÓN
+Título motivador · etapa y curso · área(s) · duración total y nº de sesiones · competencias específicas y criterios de evaluación que se trabajan (si no tienes certeza del código, descríbelos e indica «verificar en el decreto»).
+
+## 2. ORGANIZACIÓN DEL AULA
+- Número de ${esInfantil ? "rincones" : "estaciones"} (entre 4 y 6, según el tamaño del grupo) y alumnos por ${esInfantil ? "rincón" : "estación"}.
+- Agrupamientos (homogéneos o heterogéneos y por qué) y cómo se forman los equipos.
+- Tiempo en cada ${esInfantil ? "rincón" : "estación"} y señal de cambio (sonido, canción, temporizador visual).
+- Distribución del espacio: dónde va cada ${esInfantil ? "rincón" : "estación"} y qué mobiliario necesita.
+- Normas de funcionamiento (máximo 5, en positivo; ${esInfantil ? "con pictogramas" : "visibles en cada estación"}).
+
+## 3. ${esInfantil ? "RINCONES" : "ESTACIONES"} (uno por apartado)
+Para cada ${esInfantil ? "rincón" : "estación"}: nombre e icono · objetivo y criterio de evaluación vinculado · materiales concretos · actividad paso a paso · consigna para el alumnado (${esInfantil ? "muy corta, para decir en voz alta y con pictograma" : "breve y clara, para dejarla escrita en la estación"}) · grado de autonomía (con docente / semiautónoma / autónoma) · tres niveles de dificultad (apoyo, básico, reto) · adaptaciones para el alumnado con NEAE del grupo · qué evidencia deja (producto, foto, registro).
+
+## 4. PLAN DE ROTACIÓN
+Tabla: equipos en filas y turnos en columnas, indicando en qué ${esInfantil ? "rincón" : "estación"} está cada equipo en cada momento. Señala cuál es la ${esInfantil ? "zona" : "estación"} con el/la docente.
+
+## 5. PAPEL DEL DOCENTE Y DEL ADULTO DE APOYO
+Dónde se sitúa, qué observa y con quién interviene en cada turno.
+
+## 6. EVALUACIÓN
+Lista de cotejo o registro de observación por ${esInfantil ? "rincón" : "estación"} (alumno × indicador) y autoevaluación sencilla ${esInfantil ? "con caras o semáforo" : "con semáforo o diana"}.
+
+## 7. CIERRE Y RECOGIDA
+Asamblea o puesta en común final, y rutina de orden y recogida del material.
+
+## 8. VARIANTES Y CONTINUIDAD
+Cómo cambiar o ampliar ${esInfantil ? "los rincones" : "las estaciones"} en las semanas siguientes.`;
+
 
   const INSTRUCCIONES_LARGO = esDocumentoLargo ? `
 INSTRUCCIONES CRÍTICAS PARA DOCUMENTO LARGO:
@@ -341,6 +382,7 @@ GENERA: ${tipoLabel}
 
 ${tipoResultado === "aci" ? ESTRUCTURA_ACI : ""}
 ${tipoResultado === "pti" ? ESTRUCTURA_PTI : ""}
+${tipoResultado === "rincones" ? ESTRUCTURA_RINCONES : ""}
 ${INSTRUCCIONES_LARGO}
 
 INSTRUCCIONES:
@@ -355,6 +397,7 @@ ${metodologiasLabel ? `- Integra estas metodologías: ${metodologiasLabel}` : ""
 GENERA: ${tipoLabel}
 
 ${tipoResultado === "situacion" ? ESTRUCTURA_SA : ""}
+${tipoResultado === "rincones" ? ESTRUCTURA_RINCONES : ""}
 ${INSTRUCCIONES_LARGO}
 
 INSTRUCCIONES:
@@ -371,6 +414,7 @@ PERFIL DEL AULA INCLUSIVA:
 GENERA: ${tipoLabel}
 
 ${tipoResultado === "mixto_situacion" ? ESTRUCTURA_SA : ""}
+${tipoResultado === "rincones" ? ESTRUCTURA_RINCONES : ""}
 ${INSTRUCCIONES_LARGO}
 
 INSTRUCCIONES CLAVE — MODO MIXTO:
