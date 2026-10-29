@@ -55,7 +55,12 @@ const METODOLOGIAS = [
   { id:"flipped",    label:"Flipped Classroom",                    emoji:"🔄", siglas:"FC" },
   { id:"gamificacion",label:"Gamificación",                        emoji:"🏆", siglas:"" },
   { id:"talleres",   label:"Talleres (Workshop)",                  emoji:"🛠️", siglas:"" },
+  { id:"rincones",   label:"Rincones / Estaciones de aprendizaje", emoji:"🔁", siglas:"" },
 ];
+// En Infantil se habla de «rincones»; en Primaria y Secundaria, de «estaciones de aprendizaje»
+const nombreRincones = (etapa) => etapa === "infantil" ? "Rincones de aprendizaje" : etapa ? "Estaciones de aprendizaje" : "Rincones / Estaciones de aprendizaje";
+const labelMetodologia = (m, etapa) => m.id === "rincones" ? nombreRincones(etapa) : m.label;
+const labelTipo = (modo, id, etapa) => id === "rincones" ? nombreRincones(etapa) : (TIPOS_RESULTADO[modo]?.find(t => t.id === id)?.label || id);
 const IDIOMAS = ["Castellano","Inglés","Català","Valencià","Euskera","Galego"];
 
 const TIPOS_RESULTADO = {
@@ -66,6 +71,7 @@ const TIPOS_RESULTADO = {
     { id:"dua",          label:"Diseño Universal (DUA)",       emoji:"♾️" },
     { id:"pti",          label:"PTI (Anexo oficial)",          emoji:"📌" },
     { id:"recursos",     label:"Recursos y materiales",        emoji:"🛠️" },
+    { id:"rincones",     label:"Rincones / Estaciones",        emoji:"🔁" },
   ],
   ordinario:[
     { id:"situacion",    label:"Situación de Aprendizaje",     emoji:"💡" },
@@ -74,6 +80,7 @@ const TIPOS_RESULTADO = {
     { id:"rubrica",      label:"Rúbrica de evaluación",        emoji:"📊" },
     { id:"recursos",     label:"Recursos y materiales",        emoji:"🛠️" },
     { id:"familias",     label:"Comunicación familias",        emoji:"👨‍👩‍👧" },
+    { id:"rincones",     label:"Rincones / Estaciones",        emoji:"🔁" },
   ],
   mixto:[
     { id:"mixto_situacion",    label:"Situación de Aprendizaje inclusiva", emoji:"💡" },
@@ -82,10 +89,11 @@ const TIPOS_RESULTADO = {
     { id:"mixto_dua",          label:"Programación DUA",                   emoji:"♾️" },
     { id:"mixto_rubrica",      label:"Rúbrica multinivel",                 emoji:"📊" },
     { id:"mixto_plan",         label:"Plan de inclusión del aula",         emoji:"🤝" },
+    { id:"rincones",           label:"Rincones / Estaciones",              emoji:"🔁" },
   ],
 };
 
-const TIPOS_CON_DURACION = ["actividades","mixto_actividades"];
+const TIPOS_CON_DURACION = ["actividades","mixto_actividades","rincones"];
 const TIPOS_CON_SESIONES = ["situacion","programacion","aci","dua","pti","mixto_situacion","mixto_programacion","mixto_dua","mixto_plan"];
 const DURACION_SESION = ["15 min","30 min","45 min","1 hora","1,5 horas","Sesión doble"];
 const NUM_SESIONES = ["1 sesión","2 sesiones","3 sesiones","4 sesiones","5 sesiones","6 sesiones","8 sesiones","10 sesiones","12 sesiones"];
@@ -442,7 +450,7 @@ function Generator({ onSaved, contexto }) {
       } else { setDocumentoIncompleto(true); }
       if (full) {
         setSaving(true);
-        const titulo = `${TIPOS_RESULTADO[modo]?.find(t=>t.id===tipoResultado)?.label||tipoResultado} — ${area} ${curso}${ctxAlumno ? ` — ${ctxAlumno.nombre}` : ""}`;
+        const titulo = `${labelTipo(modo, tipoResultado, etapa)} — ${area} ${curso}${ctxAlumno ? ` — ${ctxAlumno.nombre}` : ""}`;
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: inserted } = await supabase.from("programaciones").insert({
@@ -486,7 +494,7 @@ function Generator({ onSaved, contexto }) {
     if (!resultado || descargando) return;
     setDescargando(true);
     try {
-      const tituloDoc = `${TIPOS_RESULTADO[modo]?.find(t=>t.id===tipoResultado)?.label||tipoResultado} — ${area} ${curso}`;
+      const tituloDoc = `${labelTipo(modo, tipoResultado, etapa)} — ${area} ${curso}`;
       await exportarWordContenido(resultado, tituloDoc, { encabezadoId });
     } catch(e) { console.error(e); alert("Error generando el documento."); }
     finally { setDescargando(false); }
@@ -698,9 +706,9 @@ function Generator({ onSaved, contexto }) {
             <section className="card"><StepHeader n="09" title="Necesidades educativas" sub="Selecciona las NEE presentes en el aula"/><div className="chips-grid">{NECESIDADES.map(n=><Chip key={n.id} {...n} selected={necesidades.includes(n.id)} onClick={()=>toggle(necesidades,setNecesidades,n.id)}/>)}</div></section>
             <section className="card"><StepHeader n="10" title="Número de alumnos con NEE"/><div className="number-picker"><button className="np-btn" onClick={()=>setNumAlumnos(Math.max(1,numAlumnos-1))}>−</button><span className="np-value">{numAlumnos}</span><button className="np-btn" onClick={()=>setNumAlumnos(Math.min(30,numAlumnos+1))}>+</button></div></section>
           </>}
-          <section className="card"><StepHeader n={modo==="ordinario"?"09":"11"} title="¿Qué quieres generar?" sub="Selecciona el tipo de documento"/><div className="tipo-grid">{(TIPOS_RESULTADO[modo]||[]).map(t=>(<button key={t.id} className={`tipo-btn ${tipoResultado===t.id?"tipo-active":""}`} onClick={()=>{setTipoResultado(t.id);setDuracion("");}}><span className="tipo-emoji">{t.emoji}</span><span className="tipo-label">{t.label}</span>{espDeTipo(t.id) && <span className="tipo-esp">con {espDeTipo(t.id).nombre}</span>}</button>))}</div></section>
+          <section className="card"><StepHeader n={modo==="ordinario"?"09":"11"} title="¿Qué quieres generar?" sub="Selecciona el tipo de documento"/><div className="tipo-grid">{(TIPOS_RESULTADO[modo]||[]).map(t=>(<button key={t.id} className={`tipo-btn ${tipoResultado===t.id?"tipo-active":""}`} onClick={()=>{setTipoResultado(t.id);setDuracion("");}}><span className="tipo-emoji">{t.emoji}</span><span className="tipo-label">{labelTipo(modo, t.id, etapa)}</span>{espDeTipo(t.id) && <span className="tipo-esp">con {espDeTipo(t.id).nombre}</span>}</button>))}</div></section>
           <section className="card"><StepHeader n={modo==="ordinario"?"10":"12"} title="Objetivos prioritarios" sub="Opcional — selecciona los que apliquen"/><div className="tags-wrap">{OBJETIVOS.map(obj=><button key={obj} className={`tag ${objetivos.includes(obj)?"tag-active":""}`} onClick={()=>toggle(objetivos,setObjetivos,obj)}>{obj}</button>)}</div></section>
-          <section className="card"><StepHeader n={modo==="ordinario"?"11":"13"} title="Metodologías" sub="Opcional — selecciona las que quieras aplicar"/><div className="chips-grid">{METODOLOGIAS.map(m=>(<button key={m.id} className={`chip ${metodologias.includes(m.id)?"chip-active":""}`} onClick={()=>toggle(metodologias,setMetodologias,m.id)}><span className="chip-emoji">{m.emoji}</span><span className="chip-label">{m.label}</span>{m.siglas&&<span className="chip-desc">{m.siglas}</span>}</button>))}</div><p className="field-hint">No es obligatorio seleccionar ninguna.</p></section>
+          <section className="card"><StepHeader n={modo==="ordinario"?"11":"13"} title="Metodologías" sub="Opcional — selecciona las que quieras aplicar"/><div className="chips-grid">{METODOLOGIAS.map(m=>(<button key={m.id} className={`chip ${metodologias.includes(m.id)?"chip-active":""}`} onClick={()=>toggle(metodologias,setMetodologias,m.id)}><span className="chip-emoji">{m.emoji}</span><span className="chip-label">{labelMetodologia(m, etapa)}</span>{m.siglas&&<span className="chip-desc">{m.siglas}</span>}</button>))}</div><p className="field-hint">No es obligatorio seleccionar ninguna.</p></section>
           <NavBtns onBack={()=>setStep(2)} onNext={()=>setStep(4)} nextDisabled={!canStep3}/>
         </div>
       )}
@@ -718,11 +726,11 @@ function Generator({ onSaved, contexto }) {
               <div><span className="r-key">Idioma</span><span className="r-val">{idioma}</span></div>
               <div><span className="r-key">Curso</span><span className="r-val">{curso}</span></div>
               <div><span className="r-key">Área</span><span className="r-val">{area}</span></div>
-              <div><span className="r-key">Documento</span><span className="r-val">{TIPOS_RESULTADO[modo]?.find(t=>t.id===tipoResultado)?.label}</span></div>
+              <div><span className="r-key">Documento</span><span className="r-val">{labelTipo(modo, tipoResultado, etapa)}</span></div>
               {duracion&&<div><span className="r-key">{needsDuracion?"Duración":"Sesiones"}</span><span className="r-val">{duracion}</span></div>}
               {tema&&<div><span className="r-key">Tema</span><span className="r-val">{tema}</span></div>}
               {necesidades.length>0&&<div><span className="r-key">NEE</span><span className="r-val">{necesidades.join(", ")}</span></div>}
-              {metodologias.length>0&&<div className="resumen-full"><span className="r-key">Metodologías</span><span className="r-val">{metodologias.map(id=>METODOLOGIAS.find(m=>m.id===id)?.label).join(", ")}</span></div>}
+              {metodologias.length>0&&<div className="resumen-full"><span className="r-key">Metodologías</span><span className="r-val">{metodologias.map(id=>{ const m = METODOLOGIAS.find(x=>x.id===id); return m ? labelMetodologia(m, etapa) : id; }).join(", ")}</span></div>}
               {comentario&&<div className="resumen-full"><span className="r-key">Contexto</span><span className="r-val">{comentario}</span></div>}
             </div>
           </section>
