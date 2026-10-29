@@ -509,6 +509,7 @@ Al terminar TODAS las secciones escribe exactamente en una línea separada:
       if (!a?.data || typeof a.data !== "string") return;
       if (a.tipo === "pdf") adjuntos.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } });
       else if (a.tipo === "imagen") adjuntos.push({ type: "image", source: { type: "base64", media_type: /^image\/(jpeg|png|webp|gif)$/.test(a.mediaType || "") ? a.mediaType : "image/jpeg", data: a.data } });
+      else if (a.tipo === "texto") adjuntos.push({ type: "text", text: `DOCUMENTO ADJUNTO${a.nombre ? ` «${String(a.nombre).slice(0, 120)}»` : ""}:\n"""\n${a.data.slice(0, 80000)}\n"""` });
     });
   }
 
