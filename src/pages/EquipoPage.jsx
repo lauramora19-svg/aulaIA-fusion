@@ -185,8 +185,18 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
               <button type="button" className="btn-back-sm" onClick={() => setArchivos(l => l.filter((_, j) => j !== i))} aria-label={`Quitar ${a.nombre}`}>✕</button>
             </span>
           ))}
-          {!archivos.length && <span className="crm-muted" style={{ fontSize: 12 }}>Word, PDF o fotos: por ejemplo, una programación ya hecha para actualizarla, o exámenes para que Rosa los corrija.</span>}
+          {!archivos.length && <span className="crm-muted" style={{ fontSize: 12 }}>Word (.docx), PDF o fotos: por ejemplo, una programación ya hecha para actualizarla, o exámenes para que Rosa los corrija.</span>}
         </div>
+        {archivos.some(a => a.tipo !== "imagen") && (
+          <p className="field-hint" style={{ margin: "4px 0 0" }}>
+            💡 Si el documento es muy largo (más de unas 40 páginas), súbelo por unidades: el resultado será mejor. Si tu Word es antiguo (.doc), ábrelo en Word y guárdalo como .docx antes de subirlo.
+          </p>
+        )}
+        {archivos.filter(a => a.largo).map((a, i) => (
+          <p key={`l${i}`} className="error-msg" style={{ margin: "4px 0 0" }}>
+            ⚠️ «{a.nombre}» es muy largo{a.recortado ? " y solo se leerá la primera parte" : ""}. Te recomiendo subirlo por unidades o pedir los cambios por partes.
+          </p>
+        ))}
         <div className="chips-grid">{EJEMPLOS.map(t => <button key={t} type="button" className="chip chip-small" onClick={() => { setTexto(t); setManual(null); }}>{t}</button>)}</div>
         <div className="chips-grid">
           <span className="crm-muted">Lo llevará:</span>
