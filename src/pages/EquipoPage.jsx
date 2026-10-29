@@ -61,7 +61,7 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
 
   const autoTexto = repartir(texto, equipo.filter(e => e.activo !== false));
   // Con fotos adjuntas y sin otra pista en el texto, lo normal es corregir: Rosa
-  const auto = autoTexto === "coordinadora" && archivos.length && equipo.some(e => e.id === "rosa" && e.activo !== false) ? "rosa" : autoTexto;
+  const auto = autoTexto === "coordinadora" && archivos.length && archivos.every(a => a.tipo === "imagen") && equipo.some(e => e.id === "rosa" && e.activo !== false) ? "rosa" : autoTexto;
   const elegido = manual || auto;
   const porId = (id) => equipo.find(e => e.id === id);
 
@@ -74,10 +74,11 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
       const alumno = alumnos.find(a => a.id === alumnoId) || null;
       const grupoTexto = await resumenGrupo(clase, alumno);
       const adj = previo ? [] : archivos;
-      const prompt = `ENCARGO:\n${pedido.trim()}${adj.length ? `\n\n(Se adjuntan ${adj.length} ${adj.length === 1 ? "archivo" : "archivos"}: ${adj.map(a => a.nombre).join(", ")}.)` : ""}${previo ? `\n\nMATERIAL DE PARTIDA (de otro especialista del equipo):\n${previo.slice(0, 12000)}` : ""}\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
+      const hayDoc = adj.some(a => a.tipo !== "imagen");
+      const prompt = `ENCARGO:\n${pedido.trim()}${adj.length ? `\n\n(Se adjuntan ${adj.length} ${adj.length === 1 ? "archivo" : "archivos"}: ${adj.map(a => a.nombre).join(", ")}.)` : ""}${hayDoc ? "\n\nSi el encargo es modificar, actualizar o completar el documento adjunto, trabaja SOBRE él: devuelve el documento COMPLETO ya modificado, con su misma estructura, apartados y orden, cambiando solo lo que se pide (y lo que haga falta para que sea coherente). No lo resumas ni lo reescribas desde cero, y no expliques los cambios dentro del documento." : ""}${previo ? `\n\nMATERIAL DE PARTIDA (de otro especialista del equipo):\n${previo.slice(0, 12000)}` : ""}\n\nAl terminar escribe exactamente:\n---\n✅ Documento completo generado por AulaIA`;
       const r = await fetch("/api/generar", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.current.signal,
-        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase, alumno).catch(() => "") : "", accessToken: await tokenActual(), archivos: adj.map(({ tipo, mediaType, data }) => ({ tipo, mediaType, data })), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
+        body: JSON.stringify({ promptOverride: prompt, especialistaId: espId, grupoTexto, contextoEncargo: clase ? await contextoEncargo(clase, alumno).catch(() => "") : "", accessToken: await tokenActual(), archivos: adj.map(({ nombre, tipo, mediaType, data }) => ({ nombre, tipo, mediaType, data })), tipoResultado: "encargo", modo: "ordinario", idioma: "Castellano", comunidad: perfil?.comunidad || clase?.comunidad, etapa: clase?.etapa, curso: clase?.curso, area: clase?.area }),
       });
       if (!r.ok) throw new Error("No se pudo generar. Inténtalo de nuevo.");
       let full = "";
@@ -175,16 +176,16 @@ export default function EquipoPage({ clases = [], onAbrirDoc }) {
           <textarea className="input-tema" rows={3} value={texto} onChange={e => { setTexto(e.target.value); setManual(null); }} placeholder="Ej.: un juego para repasar la letra P en 20 minutos" />
         </Campo>
         <div className="chips-grid" style={{ alignItems: "center" }}>
-          <button type="button" className="doc-btn" onClick={() => adjRef.current?.click()} disabled={leyendo}>{leyendo ? "⏳ Preparando…" : "📎 Adjuntar fotos o PDF"}</button>
-          <input ref={adjRef} type="file" accept="image/*,.heic,.heif,application/pdf" multiple hidden onChange={e => adjuntar(e.target.files)} />
+          <button type="button" className="doc-btn" onClick={() => adjRef.current?.click()} disabled={leyendo}>{leyendo ? "⏳ Preparando…" : "📎 Adjuntar documento o fotos"}</button>
+          <input ref={adjRef} type="file" accept="image/*,.heic,.heif,application/pdf,.docx,.txt,.md" multiple hidden onChange={e => adjuntar(e.target.files)} />
           {archivos.map((a, i) => (
             <span key={i} className="chip chip-small" title={a.nombre}>
-              {a.miniatura ? <img src={a.miniatura} alt="" style={{ width: 22, height: 22, objectFit: "cover", borderRadius: 4 }} /> : "📄"}
+              {a.miniatura ? <img src={a.miniatura} alt="" style={{ width: 22, height: 22, objectFit: "cover", borderRadius: 4 }} /> : a.tipo === "texto" ? "📝" : "📄"}
               <span className="chip-label" style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.nombre}</span>
               <button type="button" className="btn-back-sm" onClick={() => setArchivos(l => l.filter((_, j) => j !== i))} aria-label={`Quitar ${a.nombre}`}>✕</button>
             </span>
           ))}
-          {!archivos.length && <span className="crm-muted" style={{ fontSize: 12 }}>Por ejemplo, fotos de exámenes o fichas para que Rosa los corrija.</span>}
+          {!archivos.length && <span className="crm-muted" style={{ fontSize: 12 }}>Word, PDF o fotos: por ejemplo, una programación ya hecha para actualizarla, o exámenes para que Rosa los corrija.</span>}
         </div>
         <div className="chips-grid">{EJEMPLOS.map(t => <button key={t} type="button" className="chip chip-small" onClick={() => { setTexto(t); setManual(null); }}>{t}</button>)}</div>
         <div className="chips-grid">
