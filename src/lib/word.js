@@ -67,11 +67,11 @@ export const exportarWordContenido = async (contenidoOriginal, tituloDoc, opcion
   zip.file("word/styles.xml",data.stylesXML);
   zip.file("word/numbering.xml",data.numberingXML);
   zip.file("word/_rels/document.xml.rels",data.relsXML);
-  const blob=await zip.generateAsync({type:"blob"});
+  const blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   a.href=url;
   a.download=`${(tituloDoc || "Documento").replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ0-9 ]/g,"").trim() || "Documento"}.docx`;
-  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),10000);
   return a.download;
 };

@@ -9,8 +9,14 @@ export const guardarPlantillaAusencia = async (texto) => chk(await supabase.rpc(
 
 export const MARCA_MOTIVO = "[MOTIVO]";
 // El motivo no se guarda en AulaIA: solo va en el Word y en el correo
-export const conMotivo = (doc, motivo) => doc.split(MARCA_MOTIVO).join(motivo?.trim() || "(se indicará personalmente)");
-export const sinMotivo = (doc) => doc.split(MARCA_MOTIVO).join("(indicado en el correo)");
+// Limpia restos de HTML que a veces escribe la IA (p. ej. &nbsp;&nbsp;... para separar las firmas)
+export const limpiarDoc = (doc) => String(doc || "")
+  .replace(/(?:&nbsp;|\u00a0){3,}/g, "                              ")
+  .replace(/&nbsp;|\u00a0/g, " ")
+  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/<br\s*\/?>/gi, "\n");
+export const conMotivo = (doc, motivo) => limpiarDoc(doc).split(MARCA_MOTIVO).join(motivo?.trim() || "(se indicará personalmente)");
+export const sinMotivo = (doc) => limpiarDoc(doc).split(MARCA_MOTIVO).join("(indicado en el correo)");
 
 export async function enviarAvisos({ destinatarios, deNombre, desde, hasta, horario, documento }) {
   if (!destinatarios.length) return [];
