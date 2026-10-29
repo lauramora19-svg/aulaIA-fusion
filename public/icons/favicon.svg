@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="512" y2="512"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
+<mask id="m"><rect width="512" height="512" fill="#fff"/><circle cx="250" cy="340" r="20" fill="#000"/><circle cx="335" cy="425" r="20" fill="#000"/></mask></defs>
+<rect width="512" height="512" rx="112" fill="url(#g)"/>
+<text x="200" y="350" font-family="Georgia, 'DejaVu Serif', serif" font-weight="700" font-size="300" fill="#fff" text-anchor="middle">A</text>
+<g mask="url(#m)" fill="#fff7ed"><rect x="250" y="255" width="170" height="170" rx="22"/><circle cx="335" cy="255" r="30"/><circle cx="420" cy="340" r="30"/></g>
+<text x="335" y="366" font-family="Georgia, 'DejaVu Serif', serif" font-weight="700" font-size="76" fill="#ea580c" text-anchor="middle">IA</text>
+</svg>
