@@ -89,8 +89,7 @@ DATOS:
 - Fecha del documento: ${new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
 - Días de ausencia: ${fechasAusencia(desde, hasta)}
 - Horario: ${horario}
-- Grupos y materias que imparte: ${misGrupos || "[Grupos afectados]"}
-- Motivo: escribe exactamente ${MARCA_MOTIVO} donde vaya el motivo (no lo cambies ni lo expliques).
+${plantilla?.trim() ? "" : `- Grupos y materias que imparte: ${misGrupos || "[Grupos afectados]"}\n`}- Motivo: escribe exactamente ${MARCA_MOTIVO} donde vaya el motivo (no lo cambies ni lo expliques).
 ${observaciones.trim() ? `- Observaciones del docente: ${observaciones.trim()}\n` : ""}
 ${plantilla?.trim()
   ? `DOCUMENTO OFICIAL DEL COLEGIO (reprodúcelo con la misma estructura, el mismo orden y los mismos textos fijos; rellena sus huecos con los DATOS; los huecos de los que no tengas datos déjalos entre corchetes, p. ej. [Firma], para que el docente los complete; si tiene casillas de tipo de permiso, marca solo la que corresponda si se deduce y si no déjalas sin marcar):
@@ -99,7 +98,7 @@ ${plantilla.slice(0, 20000)}
 """`
   : `No hay documento oficial cargado: redacta una comunicación formal breve dirigida a la Dirección del centro, con encabezado (centro y fecha), destinatario, cuerpo con los datos, una línea para el motivo, las observaciones y un espacio de firma.`}
 
-NORMAS: escribe SOLO el documento, en Markdown sencillo (puedes usar tablas si el documento oficial las tiene). Sin comentarios para el docente.`;
+NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, tablas ni datos que no estén en el documento oficial (por ejemplo, NO pongas una tabla de grupos y materias si el documento no la tiene); usa tablas solo si el documento oficial las tiene. No uses código HTML ni entidades como &nbsp;. Para las firmas, escribe cada una en su propia línea (p. ej. «Vº Bº El Director Titular» y «Fdo.: El/la interesado/a») y deja una línea en blanco entre ellas para firmar. Sin comentarios para el docente.`;
     try { setDoc(await redactarConEspecialista("carmen", encargo, { onTexto: setDoc, signal: ctrl.current.signal })); }
     catch (e) { if (e.name !== "AbortError") setError(e.message); }
     finally { setRedactando(false); }
