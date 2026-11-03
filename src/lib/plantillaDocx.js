@@ -97,15 +97,59 @@ const anadirAlFinal = (p, texto) => {
   return p.slice(0, i) + `<w:r>${rPr}<w:t xml:space="preserve">${esc(texto)}</w:t></w:r>` + p.slice(i);
 };
 
+// Firma (imagen PNG) debajo de «Fdo.»: en el hueco {FIRMA} si el modelo lo tiene o, si no,
+// en la línea siguiente a la que contiene «Fdo», a la misma altura (mismos tabuladores).
+const EMU_CM = 360000;
+const NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+function dibujoFirma(cx, cy) {
+  return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9101" name="Firma"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="9101" name="firma.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdFirmaAulaIA"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+async function ponerFirma(zip, xml, firma) {
+  const m = /^data:image\/png;base64,(.+)$/.exec(firma?.png || "");
+  if (!m) return xml.replace(/\{FIRMA\}/g, "");
+  const ratio = firma.alto && firma.ancho ? firma.alto / firma.ancho : 0.4;
+  let cx = Math.round(4.2 * EMU_CM), cy = Math.round(cx * ratio);
+  if (cy > 1.6 * EMU_CM) { cy = Math.round(1.6 * EMU_CM); cx = Math.round(cy / ratio); }
+  const dib = dibujoFirma(cx, cy);
+  let hecho = false;
+  if (/\{FIRMA\}/.test(xml)) {
+    xml = xml.replace(/<w:r>(?:(?!<\/w:r>)[\s\S])*?\{FIRMA\}(?:(?!<\/w:r>)[\s\S])*?<\/w:r>/, (r) => { hecho = true; return r.replace("{FIRMA}", "") + dib; });
+  }
+  if (!hecho) {
+    const ps = parrafos(xml);
+    const i = ps.findIndex(p => /Fdo/i.test(textoDe(p)));
+    if (i < 0) return xml;
+    const p = ps[i];
+    const antes = p.slice(0, p.search(/<w:t(?: [^>]*)?>[^<]*Fdo/i));
+    const tabs = (antes.match(/<w:tab\/>/g) || []).length;
+    const pPr = (p.match(/<w:pPr>[\s\S]*?<\/w:pPr>/) || [""])[0];
+    const nuevo = `<w:p>${pPr}${tabs ? `<w:r>${"<w:tab/>".repeat(tabs)}</w:r>` : ""}${dib}</w:p>`;
+    const sig = ps[i + 1];
+    if (sig && !/<w:t[ >]/.test(sig)) xml = xml.replace(p + sig, p + nuevo); // ocupa la línea vacía de debajo
+    else xml = xml.replace(p, p + nuevo);
+  }
+  if (!/xmlns:wp=/.test(xml.slice(0, 3000))) xml = xml.replace("<w:document ", `<w:document xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" `);
+  if (!/xmlns:r=/.test(xml.slice(0, 3000))) xml = xml.replace("<w:document ", `<w:document xmlns:r="${NS_R}" `);
+  zip.file("word/media/firma_aulaia.png", m[1], { base64: true });
+  const relsP = "word/_rels/document.xml.rels";
+  let rels = (await zip.file(relsP)?.async("string")) || `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+  if (!rels.includes("rIdFirmaAulaIA")) rels = rels.replace("</Relationships>", `<Relationship Id="rIdFirmaAulaIA" Type="${NS_R}/image" Target="media/firma_aulaia.png"/></Relationships>`);
+  zip.file(relsP, rels);
+  let ct = await zip.file("[Content_Types].xml").async("string");
+  if (!/Extension="png"/i.test(ct)) ct = ct.replace("</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`);
+  zip.file("[Content_Types].xml", ct);
+  return xml;
+}
+
 // datos: { NOMBRE, DIAS, HORA_INICIO, HORA_FIN, DIA, MES, ANIO, FECHA, DOCUMENTOS, OBSERVACIONES }
 // opcion: índice de la casilla elegida (o null) · detalle: texto que va junto a ella
 // Devuelve { blob, texto } (texto = vista previa sencilla del documento relleno)
-export async function rellenarPlantilla(plantilla, datos, { opcion = null, detalle = "" } = {}) {
+export async function rellenarPlantilla(plantilla, datos, { opcion = null, detalle = "", firma = null } = {}) {
   const { zip, xml } = await abrir(plantilla);
   let numXml = await zip.file("word/numbering.xml")?.async("string");
   let n = -1;
   const vista = [];
-  const rellenar = (t) => t.replace(/\{([A-Z_]+)\}/g, (m, k) => (k in datos ? String(datos[k] ?? "") : m));
+  const rellenar = (t) => t.replace(/\{FIRMA\}/g, firma ? "[firma]" : "").replace(/\{([A-Z_]+)\}/g, (m, k) => (k in datos ? String(datos[k] ?? "") : m));
   let out = xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (p) => {
     const plano = (x) => textoDe(x.replace(/<w:tab\/>/g, "<w:t>\t</w:t>"));
     if (!textoDe(p).includes("{CASILLA}")) { vista.push(rellenar(plano(p))); return p; }
@@ -122,6 +166,7 @@ export async function rellenarPlantilla(plantilla, datos, { opcion = null, detal
     return q;
   });
   // Huecos de texto (la marca entera está en un mismo trozo del Word)
+  out = await ponerFirma(zip, out, firma);
   out = out.replace(/\{([A-Z_]+)\}/g, (m, k) => (k in datos ? esc(datos[k] ?? "") : m));
   zip.file("word/document.xml", out);
   if (numXml) zip.file("word/numbering.xml", numXml);

@@ -113,8 +113,49 @@ export function horasDelDia(st, fecha) {
     const override = lec && Object.prototype.hasOwnProperty.call(lec, "subjectOverride");
     const subjectId = override ? lec.subjectOverride : (typeof fijo === "string" ? fijo : fijo?.subjectId) || null;
     const group = override ? (lec.groupOverride || "") : (fijo?.group || "");
-    return { slotId: s.id, label: s.label, time: s.time, subjectId, group, titulo: lec?.title || "", aulaiaDocId: lec?.aulaiaDocId || null };
+    return { slotId: s.id, label: s.label, time: s.time, subjectId, group, titulo: lec?.title || "", notas: lec?.notes || "", neae: lec?.targetNEAE || "", aulaiaDocId: lec?.aulaiaDocId || null };
   });
+}
+
+// «María López García» → «M. L. G.» (lo que sale del aula no lleva nombres)
+export const iniciales = (nombre) => {
+  const enlaces = ["de", "del", "la", "las", "los", "el", "y", "da", "do", "dos"];
+  const t = String(nombre || "").trim().split(/\s+/).filter(p => p && !enlaces.includes(p.toLowerCase()))
+    .map(p => p.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, "").charAt(0).toUpperCase()).filter(Boolean).map(c => c + ".").join(" ");
+  return t || "Alumno/a";
+};
+
+// Carpeta de sustitución (en Markdown) para unos días y, si se indica, solo unas horas:
+// lo planificado en cada hora + avisos del alumnado NEAE de esos grupos (con iniciales).
+export function carpetaSustitucion(st, dias, slotIds = null) {
+  if (!st) return "";
+  const nombreAsig = (id) => ASIGNATURAS_AGENDA[id] || id || "Asignatura";
+  const ng = (g) => String(g || "").toLowerCase().replace(/[\s.ºª°_-]/g, "");
+  const grupos = new Set();
+  const partes = [];
+  dias.forEach(d => {
+    const fecha = new Date(`${d}T00:00:00`);
+    const horas = horasDelDia(st, fecha).filter(h => h.subjectId && (!slotIds || slotIds.includes(h.slotId)));
+    const titulo = fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    partes.push(`## ${titulo.charAt(0).toUpperCase() + titulo.slice(1)}`);
+    if (!horas.length) { partes.push("No hay clases en el horario para estas horas."); return; }
+    horas.forEach(h => {
+      if (h.group) grupos.add(ng(h.group));
+      partes.push(`### ${h.time.replace(/\s*-\s*/, "–")} · ${nombreAsig(h.subjectId)}${h.group ? ` (${h.group})` : ""}`);
+      partes.push(`- **Actividad:** ${h.titulo || "Sin planificar"}`);
+      if (h.notas) partes.push(`- **Notas / materiales:** ${h.notas.replace(/\n+/g, " ")}`);
+      if (h.neae) partes.push(`- **Adaptación NEAE:** ${h.neae.replace(/\n+/g, " ")}`);
+    });
+  });
+  const neae = (st.students || []).filter(a => a.neae && grupos.has(ng(a.group)));
+  const out = ["# Carpeta de sustitución"];
+  if ((st.substitutionNotes || "").trim()) out.push(`**Notas para quien sustituya:** ${st.substitutionNotes.trim()}`);
+  out.push(...partes);
+  if (neae.length) {
+    out.push("## Avisos de alumnado (NEAE)");
+    neae.forEach(a => out.push(`- **${iniciales(a.name)}${a.group ? ` · ${a.group}` : ""}${a.neaeType ? ` (${a.neaeType})` : ""}:** ${(a.notes || "Sin observaciones.").replace(/\n+/g, " ")}`));
+  }
+  return out.join("\n\n");
 }
 
 // Sesiones planificadas en la Agenda entre dos fechas → eventos para AulaIA
