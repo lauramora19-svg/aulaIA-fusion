@@ -251,7 +251,10 @@ export async function enviarAviso(a, sustituto) {
 // Correo automático (solo si el servicio de correo está configurado en Vercel)
 export async function enviarCorreo(aviso, pdfBase64) {
   try {
-    const r = await fetch("/api/sust-enviar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ avisoId: aviso.id, pdfBase64 }) });
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data?.session?.access_token;
+    if (!accessToken) return false;
+    const r = await fetch("/api/sust-enviar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accessToken, avisoId: aviso.id, pdfBase64 }) });
     const j = await r.json().catch(() => ({}));
     return !!j.enviado;
   } catch { return false; }
