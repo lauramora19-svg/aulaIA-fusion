@@ -29,7 +29,7 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
   const [plantilla, setPlantilla] = useState(null);
   const [editarPlantilla, setEditarPlantilla] = useState(false);
   const [textoPlantilla, setTextoPlantilla] = useState("");
-  const [desde, setDesde] = useState(isoDia());
+  const [desde, setDesde] = useState(() => { const d = new Date(); while (d.getDay() % 6 === 0) d.setDate(d.getDate() + 1); return isoDia(d); }); // si es finde, el lunes
   const [hasta, setHasta] = useState("");
   const [jornada, setJornada] = useState("completa");
   const [horas, setHoras] = useState("");
@@ -80,14 +80,19 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
   const diaCompleto = conHorario && selHoras.length === horasDia.length;
   const jornadaEf = conHorario ? (diaCompleto ? "completa" : "horas") : jornada;
   const [hIni, hFin] = conHorario ? tramo(horasDia.filter(h => selHoras.includes(h.slotId))) : [horaIni, horaFin];
-  const [verFechas, setVerFechas] = useState(false);
-  // Próximos días lectivos para elegir con un toque
-  const proximosDias = (() => {
-    const out = []; const d = new Date(); d.setHours(0, 0, 0, 0);
-    while (out.length < 10) { if (d.getDay() % 6 !== 0) out.push(isoDia(new Date(d))); d.setDate(d.getDate() + 1); }
-    return out;
-  })();
+  // Calendario pequeño (lunes a viernes, 3 semanas) para elegir el día o varios días
   const hoyIso = isoDia();
+  const [semBase, setSemBase] = useState(0);
+  const [varios, setVarios] = useState(false);
+  const semanas = (() => {
+    const l = new Date(); l.setHours(0, 0, 0, 0); l.setDate(l.getDate() - ((l.getDay() + 6) % 7) + semBase * 7);
+    return [0, 1, 2].map(w => [0, 1, 2, 3, 4].map(i => { const d = new Date(l); d.setDate(l.getDate() + w * 7 + i); return isoDia(d); }));
+  })();
+  const mesCal = (() => { const t = new Date(`${semanas[1][2]}T00:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
+  const tocarDia = (d) => {
+    if (varios && desde && !hasta && d > desde) { setHasta(d); return; }
+    setDesde(d); setHasta("");
+  };
   const toggleHora = (id) => setSelHoras(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
   const etiquetaHora = (h) => {
     const asig = h.subjectId ? (ASIGNATURAS_AGENDA[h.subjectId] || h.subjectId) : "Sin clase";
@@ -246,26 +251,32 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
           <h3>¿Cuándo vas a faltar?</h3>
           {conHorario && <button type="button" className={`aus-completo ${diaCompleto ? "aus-completo-on" : ""}`} aria-pressed={diaCompleto} onClick={() => setSelHoras(diaCompleto ? [] : horasDia.map(h => h.slotId))}>🗓️ Día completo</button>}
         </div>
-        <div className="aus-dias" role="listbox" aria-label="Día">
-          {proximosDias.map(d => {
-            const f = new Date(`${d}T00:00:00`);
-            const on = d === desde, enRango = hasta && d > desde && d <= hasta;
-            return (
-              <button key={d} type="button" role="option" aria-selected={on} className={`aus-dia ${on ? "aus-dia-on" : enRango ? "aus-dia-rango" : ""}`} onClick={() => { setDesde(d); setHasta(""); }}>
-                <span>{f.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", "")}</span>
-                <b>{f.getDate()}</b>
-                <small>{d === hoyIso ? "Hoy" : f.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</small>
-              </button>
-            );
-          })}
-        </div>
-        <button type="button" className="aus-link" onClick={() => setVerFechas(v => !v)}>{verFechas ? "Ocultar fechas" : "📅 Otra fecha o varios días"}</button>
-        {(verFechas || !proximosDias.includes(desde) || (hasta && hasta !== desde)) && (
-          <div className="crm-form-row">
-            <Campo label="Desde"><input type="date" className="input-tema" value={desde} onChange={e => setDesde(e.target.value)} /></Campo>
-            <Campo label="Hasta (si son varios días)"><input type="date" className="input-tema" value={hasta} min={desde} onChange={e => setHasta(e.target.value)} /></Campo>
+        <div className="aus-elegir">
+        <div className="aus-cal">
+          <div className="aus-cal-cab">
+            <button type="button" className="aus-cal-flecha" onClick={() => setSemBase(n => Math.max(0, n - 1))} disabled={semBase === 0} aria-label="Semanas anteriores">‹</button>
+            <strong>{mesCal}</strong>
+            <button type="button" className="aus-cal-flecha" onClick={() => setSemBase(n => n + 1)} aria-label="Semanas siguientes">›</button>
+            <label className="aus-cal-varios"><input type="checkbox" checked={varios} onChange={e => { setVarios(e.target.checked); if (!e.target.checked) setHasta(""); }} /> Varios días</label>
           </div>
-        )}
+          <div className="aus-cal-grid">
+            {["L", "M", "X", "J", "V"].map(x => <span key={x} className="aus-cal-dsem">{x}</span>)}
+            {semanas.flat().map(d => {
+              const pasado = d < hoyIso;
+              const ini = d === desde, fin = d === hasta, dentro = hasta && d > desde && d < hasta;
+              return (
+                <button key={d} type="button" disabled={pasado} onClick={() => tocarDia(d)} aria-pressed={ini || fin || !!dentro}
+                  className={`aus-cal-dia ${ini || fin ? "aus-cal-on" : dentro ? "aus-cal-rango" : ""} ${d === hoyIso ? "aus-cal-hoy" : ""}`}>
+                  {Number(d.slice(8))}
+                </button>
+              );
+            })}
+          </div>
+          <p className="aus-cal-texto">
+            {varios && desde && !hasta ? "Ahora toca el último día." : `${hasta ? "Del" : ""} ${new Date(`${desde}T00:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}${hasta ? ` al ${new Date(`${hasta}T00:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}` : ""}`}
+          </p>
+        </div>
+        <div className="aus-elegir-horas">
         {horasDia === null ? null : conHorario ? (
           <>
             <p className="field-hint" style={{ margin: "6px 0 0" }}>Toca las horas en las que vas a faltar{hasta && hasta !== desde ? " (las mismas cada día)" : ""}.</p>
@@ -303,6 +314,8 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
             {desde && <p className="field-hint" style={{ marginTop: 0 }}>{new Date(`${desde}T00:00:00`).getDay() % 6 === 0 ? "Ese día es fin de semana." : "Si rellenas tu horario semanal en la Agenda, aquí podrás tocar las horas directamente."}</p>}
           </>
         )}
+        </div>
+        </div>
         {modoDocx ? (
           <>
             <Campo label="Tu nombre y apellidos" hint="Así aparece en el documento. Se recuerda para la próxima vez.">
