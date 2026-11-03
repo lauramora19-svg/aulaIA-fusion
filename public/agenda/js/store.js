@@ -401,7 +401,7 @@ window.SEATING_LAYOUTS = SEATING_LAYOUTS;
 
 // Orden alfabético por apellido, igual que en AulaIA («Samara Ch.» va con la C).
 // «Nombre Apellidos» o «Apellidos, Nombre»; si no hay apellido, por el nombre.
-window.ordenarAlumnos = (lista) => {
+window.ordenarAlumnos = (lista, porGrupo = false) => {
   const clave = (s) => {
     const t = String((s && s.name) || '').trim().replace(/\s+/g, ' ');
     let ap = t;
@@ -409,5 +409,8 @@ window.ordenarAlumnos = (lista) => {
     else if (t.indexOf(' ') > 0) ap = t.slice(t.indexOf(' ') + 1);
     return ap.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z ]/g, '').trim().toLowerCase();
   };
-  return [...(lista || [])].sort((a, b) => clave(a).localeCompare(clave(b), 'es') || String(a.name || '').localeCompare(String(b.name || ''), 'es'));
+  const grupo = (s) => String((s && s.group) || 'zzz').trim();
+  return [...(lista || [])].sort((a, b) =>
+    (porGrupo ? grupo(a).localeCompare(grupo(b), 'es', { numeric: true, sensitivity: 'base' }) : 0) ||
+    clave(a).localeCompare(clave(b), 'es') || String(a.name || '').localeCompare(String(b.name || ''), 'es'));
 };

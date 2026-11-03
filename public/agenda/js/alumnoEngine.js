@@ -11,7 +11,8 @@ class AlumnoEngine {
     const container = document.getElementById('students-grid-container');
     if (!container) return;
 
-    let students = window.ordenarAlumnos(window.store.state.students || []);
+    // Primero por grupo (1.º A, 1.º B…) y dentro de cada grupo por apellido
+    let students = window.ordenarAlumnos(window.store.state.students || [], true);
     if (filterNEAEOnly) {
       students = students.filter(s => s.neae);
     }
@@ -27,7 +28,16 @@ class AlumnoEngine {
       return;
     }
 
-    container.innerHTML = students.map(student => `
+    const varios = new Set(students.map(s => (s.group || '').trim())).size > 1;
+    const cuenta = {}; students.forEach(s => { const g = (s.group || '').trim(); cuenta[g] = (cuenta[g] || 0) + 1; });
+    let grupoAnterior = null;
+    container.innerHTML = students.map(student => {
+      const g = (student.group || '').trim();
+      const titulo = varios && g !== grupoAnterior
+        ? `<div style="grid-column: 1/-1; display: flex; align-items: baseline; gap: 0.5rem; margin: ${grupoAnterior === null ? '0' : '1rem'} 0 0.25rem; padding-bottom: 0.35rem; border-bottom: 2px solid var(--border-color);"><strong style="font-family: var(--font-display); font-size: 1.1rem; color: var(--text-primary);">${g || 'Sin grupo'}</strong><span style="font-size: 0.85rem; color: var(--text-muted);">${cuenta[g]} ${cuenta[g] === 1 ? 'alumno/a' : 'alumnos'}</span></div>`
+        : '';
+      grupoAnterior = g;
+      return titulo + `
       <div class="student-card" data-student-id="${student.id}">
         <div class="student-header">
           <div class="student-avatar">
@@ -67,7 +77,8 @@ class AlumnoEngine {
           </button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   formatBirthday(dateStr) {
