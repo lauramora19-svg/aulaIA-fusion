@@ -8,6 +8,8 @@ import { isoDia, redactarConEspecialista, urlGmail } from "../lib/asistencia";
 import { correoInstitucional, guardarCorreoInstitucional } from "../lib/correo";
 import { textoDeDocx } from "../lib/docx";
 import { exportarWordContenido } from "../lib/word";
+import { leerAgenda, horasDelDia, ASIGNATURAS_AGENDA } from "../lib/agenda";
+import "../ausencia.css";
 import { esPlantillaDocx, prepararPlantillaDocx, opcionesPlantilla, rellenarPlantilla, descargarBlob } from "../lib/plantillaDocx";
 import {
   destinatariosCentro, plantillaAusencia, guardarPlantillaAusencia, enviarAvisos, avisosEnviados, borrarAvisos,
@@ -59,7 +61,39 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
   const [relleno, setRelleno] = useState(null); // { blob, texto }
   useEffect(() => { if (modoDocx) opcionesPlantilla(plantilla).then(setOpciones).catch(() => setOpciones([])); else setOpciones([]); }, [plantilla]);
   useEffect(() => { if (!nombreCompleto && perfil?.nombre) setNombreCompleto(perfil.nombre); }, [perfil]);
-  useEffect(() => { setRelleno(null); }, [desde, hasta, horaIni, horaFin, opcion, motivo, documentos, nombreCompleto, plantilla]);
+  // Horario de ese día (de la Agenda) para elegir las horas sin escribirlas
+  const [horasDia, setHorasDia] = useState(null); // null = cargando · [] = sin horario
+  const [selHoras, setSelHoras] = useState([]);
+  useEffect(() => {
+    let vivo = true; setSelHoras([]);
+    if (!desde) { setHorasDia([]); return; }
+    leerAgenda().then(st => {
+      if (!vivo) return;
+      const h = st ? horasDelDia(st, new Date(`${desde}T00:00:00`)) : [];
+      setHorasDia(h); setSelHoras(h.map(x => x.slotId)); // por defecto, el día completo
+    })
+      .catch(() => { if (vivo) setHorasDia([]); });
+    return () => { vivo = false; };
+  }, [desde]);
+  const conHorario = (horasDia || []).length > 0;
+  const tramo = (lista) => lista.length ? [lista[0].time.split("-")[0].trim(), lista[lista.length - 1].time.split("-").pop().trim()] : ["", ""];
+  const diaCompleto = conHorario && selHoras.length === horasDia.length;
+  const jornadaEf = conHorario ? (diaCompleto ? "completa" : "horas") : jornada;
+  const [hIni, hFin] = conHorario ? tramo(horasDia.filter(h => selHoras.includes(h.slotId))) : [horaIni, horaFin];
+  const [verFechas, setVerFechas] = useState(false);
+  // Próximos días lectivos para elegir con un toque
+  const proximosDias = (() => {
+    const out = []; const d = new Date(); d.setHours(0, 0, 0, 0);
+    while (out.length < 10) { if (d.getDay() % 6 !== 0) out.push(isoDia(new Date(d))); d.setDate(d.getDate() + 1); }
+    return out;
+  })();
+  const hoyIso = isoDia();
+  const toggleHora = (id) => setSelHoras(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
+  const etiquetaHora = (h) => {
+    const asig = h.subjectId ? (ASIGNATURAS_AGENDA[h.subjectId] || h.subjectId) : "Sin clase";
+    return `${h.time.replace(/\s*-\s*/, "–")} · ${asig}${h.group ? ` (${h.group})` : ""}`;
+  };
+  useEffect(() => { setRelleno(null); }, [desde, hasta, hIni, hFin, opcion, motivo, documentos, nombreCompleto, plantilla]);
 
   useEffect(() => {
     miPerfil().then(setPerfil).catch(() => {});
@@ -69,14 +103,16 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     return () => ctrl.current?.abort();
   }, []);
 
-  const horario = modoDocx ? (horaIni && horaFin ? `De ${horaIni} a ${horaFin}` : "") : jornada === "completa" ? "Jornada completa" : (horas.trim() || "Algunas horas");
+  const horario = jornadaEf === "completa" ? "Jornada completa"
+    : (conHorario || modoDocx) ? (hIni && hFin ? `De ${hIni} a ${hFin}` : "Algunas horas")
+    : (horas.trim() || "Algunas horas");
   const opcionTexto = opcion !== "" ? (opciones[+opcion]?.texto || "").replace(/[.:]\s*$/, "") : "";
   const motivoCorreo = modoDocx ? [opcionTexto, motivo.trim()].filter(Boolean).join(": ") : motivo.trim();
   const datosDocx = () => {
     const hoy = new Date();
     return {
       NOMBRE: nombreCompleto.trim(), DIAS: fechasAusencia(desde, hasta).replace(/^el /, ""),
-      HORA_INICIO: horaIni, HORA_FIN: horaFin, DIA: String(hoy.getDate()),
+      HORA_INICIO: hIni, HORA_FIN: hFin, DIA: String(hoy.getDate()),
       MES: hoy.toLocaleDateString("es-ES", { month: "long" }), ANIO: String(hoy.getFullYear()),
       FECHA: hoy.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }),
       DOCUMENTOS: documentos.trim(), OBSERVACIONES: observaciones.trim(),
@@ -86,13 +122,13 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     if (!desde) return "Pon la fecha de la ausencia.";
     if (hasta && hasta < desde) return "«Hasta» no puede ser antes de «Desde».";
     if (!nombreCompleto.trim()) return "Escribe tu nombre y apellidos.";
-    if (!horaIni || !horaFin) return "Pon desde qué hora y hasta qué hora.";
+    if (!hIni || !hFin) return conHorario ? "Marca las horas en las que vas a faltar." : "Pon desde qué hora y hasta qué hora.";
     return "";
   };
   const prepararDocx = async () => {
     const e = comprobarDocx(); if (e) { setError(e); return null; }
     setError(""); setOk("");
-    guardarLS("aulaia-ausencia-nombre", nombreCompleto.trim()); guardarLS("aulaia-ausencia-hini", horaIni); guardarLS("aulaia-ausencia-hfin", horaFin);
+    guardarLS("aulaia-ausencia-nombre", nombreCompleto.trim()); if (!conHorario) { guardarLS("aulaia-ausencia-hini", horaIni); guardarLS("aulaia-ausencia-hfin", horaFin); }
     try { const r = await rellenarPlantilla(plantilla, datosDocx(), { opcion: opcion === "" ? null : +opcion, detalle: motivo }); setRelleno(r); return r; }
     catch (err) { setError(err.message || "No se ha podido rellenar el documento."); return null; }
   };
@@ -206,19 +242,72 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
       <p className="crm-muted">{modoDocx ? "AulaIA rellena el documento oficial del colegio (el Word original, sin cambiarlo)." : "Carmen rellena el documento oficial del colegio."} A quien elijas le llega un aviso en AulaIA y se abre tu Gmail institucional con el correo preparado. El motivo no se guarda en AulaIA: solo va en el Word y en el correo.</p>
 
       <section className="card crm-form">
-        <div className="crm-form-row">
-          <Campo label="Desde"><input type="date" className="input-tema" value={desde} onChange={e => setDesde(e.target.value)} /></Campo>
-          <Campo label="Hasta (si son varios días)"><input type="date" className="input-tema" value={hasta} min={desde} onChange={e => setHasta(e.target.value)} /></Campo>
+        <div className="aus-cuando">
+          <h3>¿Cuándo vas a faltar?</h3>
+          {conHorario && <button type="button" className={`aus-completo ${diaCompleto ? "aus-completo-on" : ""}`} aria-pressed={diaCompleto} onClick={() => setSelHoras(diaCompleto ? [] : horasDia.map(h => h.slotId))}>🗓️ Día completo</button>}
         </div>
+        <div className="aus-dias" role="listbox" aria-label="Día">
+          {proximosDias.map(d => {
+            const f = new Date(`${d}T00:00:00`);
+            const on = d === desde, enRango = hasta && d > desde && d <= hasta;
+            return (
+              <button key={d} type="button" role="option" aria-selected={on} className={`aus-dia ${on ? "aus-dia-on" : enRango ? "aus-dia-rango" : ""}`} onClick={() => { setDesde(d); setHasta(""); }}>
+                <span>{f.toLocaleDateString("es-ES", { weekday: "short" }).replace(".", "")}</span>
+                <b>{f.getDate()}</b>
+                <small>{d === hoyIso ? "Hoy" : f.toLocaleDateString("es-ES", { month: "short" }).replace(".", "")}</small>
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className="aus-link" onClick={() => setVerFechas(v => !v)}>{verFechas ? "Ocultar fechas" : "📅 Otra fecha o varios días"}</button>
+        {(verFechas || !proximosDias.includes(desde) || (hasta && hasta !== desde)) && (
+          <div className="crm-form-row">
+            <Campo label="Desde"><input type="date" className="input-tema" value={desde} onChange={e => setDesde(e.target.value)} /></Campo>
+            <Campo label="Hasta (si son varios días)"><input type="date" className="input-tema" value={hasta} min={desde} onChange={e => setHasta(e.target.value)} /></Campo>
+          </div>
+        )}
+        {horasDia === null ? null : conHorario ? (
+          <>
+            <p className="field-hint" style={{ margin: "6px 0 0" }}>Toca las horas en las que vas a faltar{hasta && hasta !== desde ? " (las mismas cada día)" : ""}.</p>
+            <div className="aus-horas">
+              {horasDia.map(h => {
+                const [i, f] = h.time.split("-").map(x => x.trim());
+                const asig = h.subjectId ? (ASIGNATURAS_AGENDA[h.subjectId] || h.subjectId) : "";
+                const on = selHoras.includes(h.slotId);
+                return (
+                  <button key={h.slotId} type="button" className="aus-fila" aria-pressed={on} onClick={() => toggleHora(h.slotId)}>
+                    <span className="aus-hora"><b>{i}</b><small>{f}</small></span>
+                    <span className={`aus-clase ${asig ? "" : "aus-libre"} ${on ? "aus-marcada" : ""}`}>
+                      {asig ? <><strong>{h.group || asig}</strong>{h.group && <em>{asig}</em>}</> : "Sin clase"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="aus-resumen">{hIni ? <>En el documento: {diaCompleto ? "día completo, " : ""}desde las <b>{hIni}</b> hasta las <b>{hFin}</b>.</> : "Marca al menos una hora."}</p>
+          </>
+        ) : (
+          <>
+            <div className="chips-grid" role="radiogroup" aria-label="Horario">
+              <button type="button" role="radio" aria-checked={jornada === "completa"} className={`chip chip-small ${jornada === "completa" ? "chip-active" : ""}`} onClick={() => setJornada("completa")}><span className="chip-label">Todo el día</span></button>
+              <button type="button" role="radio" aria-checked={jornada === "horas"} className={`chip chip-small ${jornada === "horas" ? "chip-active" : ""}`} onClick={() => setJornada("horas")}><span className="chip-label">Solo algunas horas</span></button>
+            </div>
+            {modoDocx ? (
+              <div className="crm-form-row">
+                <Campo label="Desde las"><input type="time" className="input-tema" value={horaIni} onChange={e => setHoraIni(e.target.value)} /></Campo>
+                <Campo label="Hasta las"><input type="time" className="input-tema" value={horaFin} onChange={e => setHoraFin(e.target.value)} /></Campo>
+              </div>
+            ) : jornada === "horas" ? (
+              <input className="input-tema" style={{ maxWidth: 260 }} value={horas} onChange={e => setHoras(e.target.value)} placeholder="Ej.: de 9:00 a 11:20" aria-label="Horas" />
+            ) : null}
+            {desde && <p className="field-hint" style={{ marginTop: 0 }}>{new Date(`${desde}T00:00:00`).getDay() % 6 === 0 ? "Ese día es fin de semana." : "Si rellenas tu horario semanal en la Agenda, aquí podrás tocar las horas directamente."}</p>}
+          </>
+        )}
         {modoDocx ? (
           <>
             <Campo label="Tu nombre y apellidos" hint="Así aparece en el documento. Se recuerda para la próxima vez.">
               <input className="input-tema" value={nombreCompleto} onChange={e => setNombreCompleto(e.target.value)} placeholder="Nombre y apellidos" />
             </Campo>
-            <div className="crm-form-row">
-              <Campo label="Desde las"><input type="time" className="input-tema" value={horaIni} onChange={e => setHoraIni(e.target.value)} /></Campo>
-              <Campo label="Hasta las"><input type="time" className="input-tema" value={horaFin} onChange={e => setHoraFin(e.target.value)} /></Campo>
-            </div>
             {opciones.length > 0 && (
               <Campo label="Tipo de permiso" hint="Se marca su casilla en el documento. No se guarda en AulaIA.">
                 <select className="input-tema" value={opcion} onChange={e => setOpcion(e.target.value)}>
@@ -235,11 +324,6 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
             </Campo>
           </>
         ) : (<>
-        <div className="chips-grid" role="radiogroup" aria-label="Horario">
-          <button type="button" role="radio" aria-checked={jornada === "completa"} className={`chip chip-small ${jornada === "completa" ? "chip-active" : ""}`} onClick={() => setJornada("completa")}><span className="chip-label">Jornada completa</span></button>
-          <button type="button" role="radio" aria-checked={jornada === "horas"} className={`chip chip-small ${jornada === "horas" ? "chip-active" : ""}`} onClick={() => setJornada("horas")}><span className="chip-label">Solo algunas horas</span></button>
-          {jornada === "horas" && <input className="input-tema" style={{ maxWidth: 260 }} value={horas} onChange={e => setHoras(e.target.value)} placeholder="Ej.: de 9:00 a 11:20" aria-label="Horas" />}
-        </div>
         <Campo label="Motivo" hint="No se guarda en AulaIA: solo se escribe en el Word y en el correo.">
           <input className="input-tema" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej.: consulta médica, asuntos propios, formación…" />
         </Campo>
