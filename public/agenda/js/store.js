@@ -398,3 +398,16 @@ window.DEFAULT_SUBJECTS = DEFAULT_SUBJECTS;
 window.DEFAULT_SLOTS = DEFAULT_SLOTS;
 window.DAYS = DAYS;
 window.SEATING_LAYOUTS = SEATING_LAYOUTS;
+
+// Orden alfabético por apellido, igual que en AulaIA («Samara Ch.» va con la C).
+// «Nombre Apellidos» o «Apellidos, Nombre»; si no hay apellido, por el nombre.
+window.ordenarAlumnos = (lista) => {
+  const clave = (s) => {
+    const t = String((s && s.name) || '').trim().replace(/\s+/g, ' ');
+    let ap = t;
+    if (t.includes(',')) ap = t.split(',')[0];
+    else if (t.indexOf(' ') > 0) ap = t.slice(t.indexOf(' ') + 1);
+    return ap.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z ]/g, '').trim().toLowerCase();
+  };
+  return [...(lista || [])].sort((a, b) => clave(a).localeCompare(clave(b), 'es') || String(a.name || '').localeCompare(String(b.name || ''), 'es'));
+};

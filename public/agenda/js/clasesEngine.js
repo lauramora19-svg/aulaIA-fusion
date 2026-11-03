@@ -10,7 +10,7 @@ class ClasesEngine {
   // Alumnado que pertenece a una clase, por coincidencia del campo "Grupo"
   studentsForClass(cls) {
     if (!cls) return [];
-    return (window.store.state.students || []).filter(s => s.group === cls.groupLabel);
+    return window.ordenarAlumnos((window.store.state.students || []).filter(s => s.group === cls.groupLabel));
   }
 
   // Se asegura de que exista un registro de asientos para la clase, y lo

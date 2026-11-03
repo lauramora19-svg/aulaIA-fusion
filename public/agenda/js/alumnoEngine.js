@@ -11,7 +11,7 @@ class AlumnoEngine {
     const container = document.getElementById('students-grid-container');
     if (!container) return;
 
-    let students = window.store.state.students || [];
+    let students = window.ordenarAlumnos(window.store.state.students || []);
     if (filterNEAEOnly) {
       students = students.filter(s => s.neae);
     }
