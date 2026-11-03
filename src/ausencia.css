@@ -1,0 +1,28 @@
+/* Comunicar mi ausencia: elegir días y horas (clases nuevas; no cambia ningún estilo existente) */
+.aus-cuando { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; }
+.aus-cuando h3 { margin: 0; font-family: var(--font-display); font-size: 20px; color: var(--text); }
+.aus-dias { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity; }
+.aus-dia { flex: 0 0 auto; width: 72px; padding: 10px 0 8px; border-radius: 14px; border: 1.5px solid #e7e5e4; background: #fff; cursor: pointer; text-align: center; font-family: inherit; scroll-snap-align: start; transition: border-color .15s, background .15s; }
+.aus-dia:hover { border-color: var(--peach); }
+.aus-dia span { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.aus-dia b { display: block; font-size: 24px; line-height: 1.2; color: var(--text); }
+.aus-dia small { display: block; font-size: 12px; color: var(--text-muted); }
+.aus-dia-on { background: var(--orange); border-color: var(--orange); }
+.aus-dia-on span, .aus-dia-on b, .aus-dia-on small { color: #fff; }
+.aus-dia-rango { background: var(--orange-dim); border-color: var(--peach); }
+.aus-link { border: 0; background: none; padding: 4px 0; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--orange); cursor: pointer; }
+.aus-completo { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--orange); background: #fff; color: var(--orange); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.aus-completo-on { background: var(--orange); color: #fff; }
+.aus-horas { border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; background: #fff; margin: 6px 0 4px; }
+.aus-fila { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-top: 1px solid #f0eeec; background: none; text-align: left; font-family: inherit; cursor: pointer; }
+.aus-fila:first-child { border-top: 0; }
+.aus-hora b { display: block; font-size: 15px; color: var(--text); }
+.aus-hora small { display: block; font-size: 13px; color: var(--text-muted); }
+.aus-clase { position: relative; min-height: 48px; display: flex; flex-direction: column; justify-content: center; padding: 8px 40px 8px 14px; border-radius: 12px; border: 1.5px dashed transparent; background: #f0f9ff; }
+.aus-clase strong { font-size: 15px; color: var(--text); }
+.aus-clase em { font-style: normal; font-size: 13px; color: var(--text-muted); }
+.aus-libre { background: transparent; color: var(--text-light); font-size: 13px; }
+.aus-marcada { border-color: #ea580c; background-image: repeating-linear-gradient(135deg, rgba(234,88,12,.13) 0 2px, transparent 2px 11px); }
+.aus-marcada::after { content: "✓"; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid #ea580c; color: #ea580c; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.aus-resumen { font-size: 13px; color: var(--text-mid); margin: 4px 0 0; }
+@media (max-width: 520px) { .aus-fila { grid-template-columns: 62px 1fr; } .aus-dia { width: 64px; } }
