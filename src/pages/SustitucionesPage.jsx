@@ -113,10 +113,28 @@ function PanelDia({ etapa, etapas, fecha, setFecha, centro, irHorarios }) {
     const doc = await pdfAviso({ ...a, plan: planDe(a), nombre: s?.nombre }, centro);
     doc.save(`Sustitucion_${a.fecha}_${(a.grupo || "").replace(/\W+/g, "")}.pdf`);
   };
-  const cuadro = async (completa) => {
+  const cuadro = async (completa, compartir = false) => {
     const filas = asig.map(a => ({ hora: a.hora, grupo: a.grupo, materia: a.materia, aula: a.aula, ausente: prof(a.ausente_id)?.nombre || "", sustituto: prof(a.sustituto_id)?.nombre || "", obs: a.observaciones || "" }));
     const doc = await pdfCuadro({ etapa, fecha, filas, completa, centro });
-    doc.save(`Cuadro_${etapaDe(etapa).nombre.split(" ")[0]}_${fecha}_${completa ? "direccion" : "sala"}.pdf`);
+    const nombre = `Sustituciones ${etapaDe(etapa).nombre.split(" ")[0]} ${fecha}${completa ? " direccion" : ""}.pdf`;
+    if (compartir) return compartirPdf(doc, nombre, `Cuadro de sustituciones · ${fechaLarga(fecha)}`);
+    doc.save(nombre);
+  };
+  // Abre el menú «Compartir» del móvil o del Mac (WhatsApp, Mail, AirDrop…) con el PDF.
+  // Si el navegador no lo permite, lo descarga para adjuntarlo a mano.
+  const compartirPdf = async (doc, nombre, texto) => {
+    const file = new File([doc.output("blob")], nombre, { type: "application/pdf" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: nombre.replace(/\.pdf$/, ""), text: texto }); return; }
+      catch (e) { if (e?.name === "AbortError") return; }
+    }
+    doc.save(nombre);
+    setOk("Se ha descargado el PDF (está en Descargas): adjúntalo en WhatsApp o en el correo.");
+  };
+  const whatsapp = (a) => {
+    const s = prof(a.sustituto_id);
+    const texto = `Hola${s?.nombre ? " " + s.nombre.split(" ")[0] : ""}: tienes una sustitución el ${fechaLarga(a.fecha)}, ${a.hora} · ${a.grupo}${a.materia ? " · " + a.materia : ""}${a.aula ? " · " + a.aula : ""}.${planDe(a) ? "\n\nPlan de la sesión:\n" + planDe(a) : ""}\n\nGracias.`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
   };
 
   return (
@@ -135,6 +153,7 @@ function PanelDia({ etapa, etapas, fecha, setFecha, centro, irHorarios }) {
           <button className="library-new-btn" onClick={() => setRegistrar(true)}>➕ Registrar ausencia</button>
           <button className="doc-btn" disabled={!asig.length} onClick={() => cuadro(true)}>📄 Cuadro (dirección)</button>
           <button className="doc-btn" disabled={!asig.length} onClick={() => cuadro(false)}>📄 Cuadro (sala de profesores)</button>
+          <button className="doc-btn" disabled={!asig.length} onClick={() => cuadro(false, true).catch(e => setError(e.message))}>📲 Compartir cuadro</button>
         </div>
       </div>
 
@@ -218,6 +237,7 @@ function PanelDia({ etapa, etapas, fecha, setFecha, centro, irHorarios }) {
                               {a.estado === "enviada" && <>
                                 <button className="sust-btn sust-btn-suave" onClick={() => verPdf(a)}>📄 PDF</button>
                                 <button className="sust-btn sust-btn-suave" onClick={() => correo(a)}>✉️ Correo</button>
+                                <button className="sust-btn sust-btn-suave" onClick={() => whatsapp(a)}>💬 WhatsApp</button>
                               </>}
                             </div>
                           </td>
