@@ -8,6 +8,7 @@ import { isoDia, redactarConEspecialista, urlGmail } from "../lib/asistencia";
 import { correoInstitucional, guardarCorreoInstitucional } from "../lib/correo";
 import { textoDeDocx } from "../lib/docx";
 import { exportarWordContenido } from "../lib/word";
+import { esPlantillaDocx, prepararPlantillaDocx, opcionesPlantilla, rellenarPlantilla, descargarBlob } from "../lib/plantillaDocx";
 import {
   destinatariosCentro, plantillaAusencia, guardarPlantillaAusencia, enviarAvisos, avisosEnviados, borrarAvisos,
   conMotivo, fechasAusencia, MARCA_MOTIVO,
@@ -45,6 +46,20 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
   const ctrl = useRef(null);
   const fileRef = useRef(null);
   const puedePlantilla = esAdmin || esAdminCentro;
+  // Modelo oficial en Word con huecos: se rellena el original, sin IA
+  const leerLS = (k, d = "") => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+  const guardarLS = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const modoDocx = esPlantillaDocx(plantilla);
+  const [opciones, setOpciones] = useState([]);
+  const [opcion, setOpcion] = useState("");
+  const [nombreCompleto, setNombreCompleto] = useState(() => leerLS("aulaia-ausencia-nombre"));
+  const [horaIni, setHoraIni] = useState(() => leerLS("aulaia-ausencia-hini"));
+  const [horaFin, setHoraFin] = useState(() => leerLS("aulaia-ausencia-hfin"));
+  const [documentos, setDocumentos] = useState("");
+  const [relleno, setRelleno] = useState(null); // { blob, texto }
+  useEffect(() => { if (modoDocx) opcionesPlantilla(plantilla).then(setOpciones).catch(() => setOpciones([])); else setOpciones([]); }, [plantilla]);
+  useEffect(() => { if (!nombreCompleto && perfil?.nombre) setNombreCompleto(perfil.nombre); }, [perfil]);
+  useEffect(() => { setRelleno(null); }, [desde, hasta, horaIni, horaFin, opcion, motivo, documentos, nombreCompleto, plantilla]);
 
   useEffect(() => {
     miPerfil().then(setPerfil).catch(() => {});
@@ -54,23 +69,53 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     return () => ctrl.current?.abort();
   }, []);
 
-  const horario = jornada === "completa" ? "Jornada completa" : (horas.trim() || "Algunas horas");
+  const horario = modoDocx ? (horaIni && horaFin ? `De ${horaIni} a ${horaFin}` : "") : jornada === "completa" ? "Jornada completa" : (horas.trim() || "Algunas horas");
+  const opcionTexto = opcion !== "" ? (opciones[+opcion]?.texto || "").replace(/[.:]\s*$/, "") : "";
+  const motivoCorreo = modoDocx ? [opcionTexto, motivo.trim()].filter(Boolean).join(": ") : motivo.trim();
+  const datosDocx = () => {
+    const hoy = new Date();
+    return {
+      NOMBRE: nombreCompleto.trim(), DIAS: fechasAusencia(desde, hasta).replace(/^el /, ""),
+      HORA_INICIO: horaIni, HORA_FIN: horaFin, DIA: String(hoy.getDate()),
+      MES: hoy.toLocaleDateString("es-ES", { month: "long" }), ANIO: String(hoy.getFullYear()),
+      FECHA: hoy.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }),
+      DOCUMENTOS: documentos.trim(), OBSERVACIONES: observaciones.trim(),
+    };
+  };
+  const comprobarDocx = () => {
+    if (!desde) return "Pon la fecha de la ausencia.";
+    if (hasta && hasta < desde) return "«Hasta» no puede ser antes de «Desde».";
+    if (!nombreCompleto.trim()) return "Escribe tu nombre y apellidos.";
+    if (!horaIni || !horaFin) return "Pon desde qué hora y hasta qué hora.";
+    return "";
+  };
+  const prepararDocx = async () => {
+    const e = comprobarDocx(); if (e) { setError(e); return null; }
+    setError(""); setOk("");
+    guardarLS("aulaia-ausencia-nombre", nombreCompleto.trim()); guardarLS("aulaia-ausencia-hini", horaIni); guardarLS("aulaia-ausencia-hfin", horaFin);
+    try { const r = await rellenarPlantilla(plantilla, datosDocx(), { opcion: opcion === "" ? null : +opcion, detalle: motivo }); setRelleno(r); return r; }
+    catch (err) { setError(err.message || "No se ha podido rellenar el documento."); return null; }
+  };
+  const tituloDocx = () => `Solicitud de permiso ${nombreCompleto.trim()} ${desde}`;
   const correosOtros = otros.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
   const toggle = (id) => setElegidos(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
 
   const guardarPlantilla = async () => {
     setError(""); setOk("");
-    try { await guardarPlantillaAusencia(textoPlantilla); setPlantilla(textoPlantilla); setEditarPlantilla(false); setOk("Documento oficial guardado: Carmen lo usará para todo el profesorado del centro."); }
+    try { await guardarPlantillaAusencia(textoPlantilla); setPlantilla(textoPlantilla); setEditarPlantilla(false); setOk(esPlantillaDocx(textoPlantilla) ? "Documento oficial guardado: AulaIA lo rellenará tal cual para todo el profesorado del centro." : "Documento oficial guardado: Carmen lo usará para todo el profesorado del centro."); }
     catch (e) { setError(e.message); }
   };
   const leerPlantilla = async (file) => {
     if (!file) return;
     setError("");
     try {
-      if (/\.docx$/i.test(file.name)) setTextoPlantilla(await textoDeDocx(file));
+      if (/\.docx$/i.test(file.name)) {
+        const conHuecos = await prepararPlantillaDocx(file); // Word con {NOMBRE}, {CASILLA}…: se guarda tal cual
+        setTextoPlantilla(conHuecos || await textoDeDocx(file));
+      }
       else if (/\.(txt|md)$/i.test(file.name)) setTextoPlantilla(await file.text());
       else setError("Sube el documento en Word (.docx). Si lo tienes en PDF, copia su texto y pégalo en el recuadro.");
-    } catch { setError("No se ha podido leer el documento. Copia su texto y pégalo en el recuadro."); }
+    } catch (e) { setError(e?.message?.includes("pesa demasiado") ? e.message : "No se ha podido leer el documento. Copia su texto y pégalo en el recuadro."); }
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -110,16 +155,27 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
     if (!dest.length && !correosOtros.length) { setError("Elige a quién va el comunicado."); return; }
     if (malos.length) { setError(`Revisa estos correos: ${malos.join(", ")}`); return; }
     if (correo && !emailValido(correo)) { setError("Revisa tu correo institucional."); return; }
+    if (modoDocx) { const e = comprobarDocx(); if (e) { setError(e); return; } }
     setEnviando(true); setError(""); setOk(""); setGmailUrl("");
     const ventana = window.open("", "_blank"); // se abre ya, para que el navegador no la bloquee
     try {
       guardarCorreoInstitucional(correo);
-      const documento = conMotivo(doc, motivo);
-      await enviarAvisos({ destinatarios: dest, deNombre: perfil?.nombre || correo, desde, hasta, horario, documento: doc });
-      const titulo = `Comunicacion de ausencia ${perfil?.nombre || ""} ${desde}`;
-      const archivo = await exportarWordContenido(documento, titulo, { encabezadoId: encabezado });
+      let archivo;
+      if (modoDocx) {
+        const r = await prepararDocx();
+        if (!r) throw new Error("No se ha podido rellenar el documento.");
+        // En AulaIA se guarda sin el tipo de permiso ni el detalle (el motivo no se guarda)
+        const sinDatos = await rellenarPlantilla(plantilla, { ...datosDocx(), DOCUMENTOS: "" }, { opcion: null });
+        await enviarAvisos({ destinatarios: dest, deNombre: nombreCompleto.trim() || perfil?.nombre || correo, desde, hasta, horario, documento: sinDatos.texto });
+        archivo = descargarBlob(r.blob, tituloDocx());
+      } else {
+        const documento = conMotivo(doc, motivo);
+        await enviarAvisos({ destinatarios: dest, deNombre: perfil?.nombre || correo, desde, hasta, horario, documento: doc });
+        const titulo = `Comunicacion de ausencia ${perfil?.nombre || ""} ${desde}`;
+        archivo = await exportarWordContenido(documento, titulo, { encabezadoId: encabezado });
+      }
       const para = [...dest.map(d => d.email), ...correosOtros];
-      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivo.trim() ? `\nMotivo: ${motivo.trim()}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia.\n\nUn saludo,\n${perfil?.nombre || ""}`;
+      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivoCorreo ? `\nMotivo: ${motivoCorreo}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia.\n\nUn saludo,\n${(modoDocx && nombreCompleto.trim()) || perfil?.nombre || ""}`;
       const url = urlGmail({ para, asunto: `Comunicación de ausencia · ${perfil?.nombre || ""} · ${fechasAusencia(desde, hasta)}`, cuerpo, cuenta: correo });
       setGmailUrl(url);
       if (ventana) ventana.location.href = url;
@@ -147,13 +203,38 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
   return (
     <div className="crm-page">
       <h1 className="crm-hello-title">📨 Comunicar mi ausencia</h1>
-      <p className="crm-muted">Carmen rellena el documento oficial del colegio. A quien elijas le llega un aviso en AulaIA y se abre tu Gmail institucional con el correo preparado. El motivo no se guarda en AulaIA: solo va en el Word y en el correo.</p>
+      <p className="crm-muted">{modoDocx ? "AulaIA rellena el documento oficial del colegio (el Word original, sin cambiarlo)." : "Carmen rellena el documento oficial del colegio."} A quien elijas le llega un aviso en AulaIA y se abre tu Gmail institucional con el correo preparado. El motivo no se guarda en AulaIA: solo va en el Word y en el correo.</p>
 
       <section className="card crm-form">
         <div className="crm-form-row">
           <Campo label="Desde"><input type="date" className="input-tema" value={desde} onChange={e => setDesde(e.target.value)} /></Campo>
           <Campo label="Hasta (si son varios días)"><input type="date" className="input-tema" value={hasta} min={desde} onChange={e => setHasta(e.target.value)} /></Campo>
         </div>
+        {modoDocx ? (
+          <>
+            <Campo label="Tu nombre y apellidos" hint="Así aparece en el documento. Se recuerda para la próxima vez.">
+              <input className="input-tema" value={nombreCompleto} onChange={e => setNombreCompleto(e.target.value)} placeholder="Nombre y apellidos" />
+            </Campo>
+            <div className="crm-form-row">
+              <Campo label="Desde las"><input type="time" className="input-tema" value={horaIni} onChange={e => setHoraIni(e.target.value)} /></Campo>
+              <Campo label="Hasta las"><input type="time" className="input-tema" value={horaFin} onChange={e => setHoraFin(e.target.value)} /></Campo>
+            </div>
+            {opciones.length > 0 && (
+              <Campo label="Tipo de permiso" hint="Se marca su casilla en el documento. No se guarda en AulaIA.">
+                <select className="input-tema" value={opcion} onChange={e => setOpcion(e.target.value)}>
+                  <option value="">— Sin marcar —</option>
+                  {opciones.map(o => <option key={o.i} value={o.i}>{o.texto}</option>)}
+                </select>
+              </Campo>
+            )}
+            <Campo label="Detalle del motivo (opcional)" hint="Se escribe junto a la casilla elegida (p. ej. el grado de parentesco) o en «Otros». No se guarda en AulaIA.">
+              <input className="input-tema" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej.: padre · revisión médica · curso de formación…" />
+            </Campo>
+            <Campo label="Documentos aportados (opcional)">
+              <input className="input-tema" value={documentos} onChange={e => setDocumentos(e.target.value)} placeholder="Ej.: justificante de la consulta" />
+            </Campo>
+          </>
+        ) : (<>
         <div className="chips-grid" role="radiogroup" aria-label="Horario">
           <button type="button" role="radio" aria-checked={jornada === "completa"} className={`chip chip-small ${jornada === "completa" ? "chip-active" : ""}`} onClick={() => setJornada("completa")}><span className="chip-label">Jornada completa</span></button>
           <button type="button" role="radio" aria-checked={jornada === "horas"} className={`chip chip-small ${jornada === "horas" ? "chip-active" : ""}`} onClick={() => setJornada("horas")}><span className="chip-label">Solo algunas horas</span></button>
@@ -162,7 +243,8 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
         <Campo label="Motivo" hint="No se guarda en AulaIA: solo se escribe en el Word y en el correo.">
           <input className="input-tema" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej.: consulta médica, asuntos propios, formación…" />
         </Campo>
-        <Campo label="Observaciones (opcional)">
+        </>)}
+        <Campo label="Observaciones (opcional)" hint={modoDocx ? "Van en el correo, no en el documento." : undefined}>
           <input className="input-tema" value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Ej.: dejo preparada la carpeta de sustitución con las tareas" />
         </Campo>
         {onCarpeta && <p className="field-hint" style={{ marginTop: 0 }}>¿Necesitas dejar tareas? <button type="button" className="btn-back-sm" onClick={onCarpeta}>🗂️ Preparar la carpeta de sustitución</button></p>}
@@ -185,10 +267,10 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
             <input className="input-tema" type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="nombre@colegio.org" />
           </Campo>
         </div>
-        <EncabezadoSelect value={encabezado} onChange={setEncabezado} etiqueta="🏷️ Encabezado del Word" />
+        {!modoDocx && <EncabezadoSelect value={encabezado} onChange={setEncabezado} etiqueta="🏷️ Encabezado del Word" />}
 
         <p className="field-hint">
-          {plantilla === null ? "" : plantilla.trim() ? "📄 Documento oficial del colegio cargado: Carmen lo rellenará con el mismo formato." : "📄 Aún no hay documento oficial del colegio: Carmen escribirá una comunicación formal estándar."}
+          {plantilla === null ? "" : modoDocx ? "📄 Documento oficial del colegio cargado: AulaIA rellena sus huecos y lo deja exactamente igual que el original." : plantilla.trim() ? "📄 Documento oficial del colegio cargado: Carmen lo rellenará con el mismo formato." : "📄 Aún no hay documento oficial del colegio: Carmen escribirá una comunicación formal estándar."}
           {puedePlantilla && <> <button type="button" className="btn-back-sm" onClick={() => setEditarPlantilla(v => !v)}>{editarPlantilla ? "Cerrar" : plantilla?.trim() ? "⚙️ Cambiar el documento oficial" : "⚙️ Subir el documento oficial"}</button></>}
         </p>
         {editarPlantilla && (
@@ -198,7 +280,12 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
               <button type="button" className="doc-btn" onClick={() => fileRef.current?.click()}>📎 Subir Word (.docx)</button>
               <input ref={fileRef} type="file" accept=".docx,.txt,.md" hidden onChange={e => leerPlantilla(e.target.files?.[0])} />
             </div>
-            <textarea className="input-tema" rows={10} value={textoPlantilla} onChange={e => setTextoPlantilla(e.target.value)} placeholder="Texto del documento oficial de comunicación de ausencias…" />
+            {esPlantillaDocx(textoPlantilla)
+              ? <p className="crm-aviso" style={{ margin: "8px 0" }}>✅ Word con huecos marcados ({"{NOMBRE}"}, {"{CASILLA}"}…). AulaIA rellenará el documento original sin cambiar su formato. <button type="button" className="btn-back-sm" onClick={() => setTextoPlantilla("")}>Quitar</button></p>
+              : <>
+                  <textarea className="input-tema" rows={10} value={textoPlantilla} onChange={e => setTextoPlantilla(e.target.value)} placeholder="Texto del documento oficial de comunicación de ausencias…" />
+                  <p className="field-hint">Para que quede idéntico al original, sube un Word con huecos marcados: {"{NOMBRE}"}, {"{DIAS}"}, {"{HORA_INICIO}"}, {"{HORA_FIN}"}, {"{DIA}"} {"{MES}"} {"{ANIO}"}, {"{DOCUMENTOS}"} y {"{CASILLA}"} delante de cada opción con casilla.</p>
+                </>}
             <div className="crm-modal-actions"><span style={{ flex: 1 }} /><button type="button" className="library-new-btn" onClick={guardarPlantilla}>💾 Guardar documento oficial</button></div>
           </div>
         )}
@@ -207,12 +294,27 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
         {ok && <p className="crm-aviso">✅ {ok}{gmailUrl && <> <a href={gmailUrl} target="_blank" rel="noopener noreferrer">Abrir Gmail otra vez</a></>}</p>}
         <div className="crm-modal-actions">
           <span style={{ flex: 1 }} />
-          {redactando && <button className="btn-back" onClick={() => ctrl.current?.abort()}>Cancelar</button>}
-          <button className="generate-btn generate-active" onClick={redactar} disabled={redactando}>{redactando ? "Carmen está rellenando el documento…" : doc ? "✨ Volver a rellenar" : "✨ Que Carmen rellene el documento"}</button>
+          {!modoDocx && redactando && <button className="btn-back" onClick={() => ctrl.current?.abort()}>Cancelar</button>}
+          {modoDocx
+            ? <button className="generate-btn generate-active" onClick={prepararDocx}>{relleno ? "🔄 Actualizar el documento" : "📄 Preparar el documento"}</button>
+            : <button className="generate-btn generate-active" onClick={redactar} disabled={redactando}>{redactando ? "Carmen está rellenando el documento…" : doc ? "✨ Volver a rellenar" : "✨ Que Carmen rellene el documento"}</button>}
         </div>
       </section>
 
-      {doc && (
+      {modoDocx && relleno && (
+        <section className="card">
+          <p className="crm-card-title" style={{ marginTop: 0 }}>Documento relleno (revísalo antes de enviarlo)</p>
+          <div className="resultado-body" style={{ whiteSpace: "pre-wrap", fontSize: 14 }}>{relleno.texto}</div>
+          <p className="field-hint">Esto es un resumen del texto: el Word que se descarga es el original del colegio, con su mismo formato.</p>
+          <div className="crm-modal-actions" style={{ flexWrap: "wrap" }}>
+            <span style={{ flex: 1 }} />
+            <button className="btn-word" onClick={() => descargarBlob(relleno.blob, tituloDocx())}>📄 Solo descargar Word</button>
+            <button className="library-new-btn" onClick={enviar} disabled={enviando}>{enviando ? "Enviando…" : "📨 Enviar a dirección"}</button>
+          </div>
+        </section>
+      )}
+
+      {!modoDocx && doc && (
         <section className="card">
           <div className="crm-modal-actions" style={{ justifyContent: "flex-start", marginTop: 0 }}>
             <p className="crm-card-title" style={{ margin: 0, flex: 1 }}>Documento (revísalo antes de enviarlo)</p>
