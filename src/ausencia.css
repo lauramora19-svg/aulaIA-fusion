@@ -23,17 +23,27 @@
 .aus-link { border: 0; background: none; padding: 4px 0; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--orange); cursor: pointer; }
 .aus-completo { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--orange); background: #fff; color: var(--orange); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .aus-completo-on { background: var(--orange); color: #fff; }
-.aus-horas { border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden; background: #fff; margin: 6px 0 4px; }
-.aus-fila { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-top: 1px solid #f0eeec; background: none; text-align: left; font-family: inherit; cursor: pointer; }
-.aus-fila:first-child { border-top: 0; }
-.aus-hora b { display: block; font-size: 15px; color: var(--text); }
-.aus-hora small { display: block; font-size: 13px; color: var(--text-muted); }
-.aus-clase { position: relative; min-height: 48px; display: flex; flex-direction: column; justify-content: center; padding: 8px 40px 8px 14px; border-radius: 12px; border: 1.5px dashed transparent; background: #f0f9ff; }
-.aus-clase strong { font-size: 15px; color: var(--text); }
-.aus-clase em { font-style: normal; font-size: 13px; color: var(--text-muted); }
-.aus-libre { background: transparent; color: var(--text-light); font-size: 13px; }
-.aus-marcada { border-color: #ea580c; background-image: repeating-linear-gradient(135deg, rgba(234,88,12,.13) 0 2px, transparent 2px 11px); }
-.aus-marcada::after { content: "✓"; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid #ea580c; color: #ea580c; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-.aus-resumen { font-size: 13px; color: var(--text-mid); margin: 4px 0 0; }
+.aus-linea { display: flex; gap: 3px; height: 12px; margin: 10px 0 2px; }
+.aus-linea span { border-radius: 6px; background: #e7e5e4; transition: background .15s; }
+.aus-linea span.aus-linea-on { background: var(--orange); }
+.aus-linea-horas { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+.aus-horas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.aus-hora-tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 78px; padding: 10px 12px; border-radius: 14px; border: 1.5px solid #e7e5e4; background: #fff; text-align: left; font-family: inherit; cursor: pointer; transition: background .15s, border-color .15s; }
+.aus-hora-tile:hover { border-color: var(--peach); }
+.aus-hora-t { font-size: 12px; font-weight: 800; color: var(--text-muted); letter-spacing: .3px; }
+.aus-hora-tile strong { font-size: 15px; color: var(--text); }
+.aus-hora-tile em { font-style: normal; font-size: 13px; color: var(--text-muted); }
+.aus-hora-libre { background: #fafaf9; }
+.aus-hora-on { background: var(--orange); border-color: var(--orange); }
+.aus-hora-on .aus-hora-t, .aus-hora-on strong, .aus-hora-on em { color: #fff; }
+.aus-hora-on::after { content: "✓"; position: absolute; top: 8px; right: 10px; width: 20px; height: 20px; border-radius: 50%; background: #fff; color: var(--orange); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.aus-resumen { font-size: 13px; color: var(--text-mid); margin: 8px 0 0; }
+.aus-carpeta { border: 1px dashed var(--border); border-radius: 14px; padding: 10px 14px; background: #fffaf5; }
+.aus-carpeta-check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer; }
+.aus-carpeta-vista { margin-top: 10px; max-height: 360px; overflow: auto; background: #fff; border-radius: 10px; padding: 4px 14px; }
+.aus-firma { margin-top: 8px; }
+.aus-firma-actual { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aus-firma-actual img { max-height: 56px; max-width: 220px; background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; padding: 4px 8px; }
+.aus-firma-lienzo { display: block; width: 100%; max-width: 460px; height: 150px; background: #fff; border: 1.5px dashed var(--peach); border-radius: 12px; touch-action: none; cursor: crosshair; }
 @media (max-width: 860px) { .aus-elegir { grid-template-columns: 1fr; } }
-@media (max-width: 520px) { .aus-fila { grid-template-columns: 62px 1fr; } }
+@media (max-width: 520px) { .aus-horas { grid-template-columns: repeat(2, 1fr); } }
