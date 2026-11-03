@@ -483,7 +483,7 @@ export async function sincronizarAuto() {
       const d = { agenda: {}, aula: {}, dif: {}, clasesAgenda: {}, clasesAula: {} };
       const nuevosAgenda = plan.nuevosAgenda.filter(n => {
         if (n.propuestaId) { d.agenda[n.studentId] = { accion: "emparejar", alumnoId: n.propuestaId }; return true; }
-        if (!n.dudoso && n.grupo && gruposAula.has(normG(n.grupo))) { d.agenda[n.studentId] = { accion: "crear" }; return true; }
+        if (!n.dudoso && n.grupo) { d.agenda[n.studentId] = { accion: "crear" }; return true; } // su grupo se crea si no existe
         return false;
       });
       const nuevosAula = plan.nuevosAula.filter(n => nuncaEnviados.has(n.alumnoId));
@@ -496,13 +496,89 @@ export async function sincronizarAuto() {
       if (nuevosAgenda.length || nuevosAula.length || clasesNuevasAgenda.length || clasesNuevasAula.length)
         r = await aplicarSincronizacion({ nuevosAgenda, nuevosAula, diferencias: [], desaparecidos: [], clasesNuevasAgenda, clasesNuevasAula }, d);
       if (await quitarBorradosEnAgenda()) window.dispatchEvent(new CustomEvent("aulaia-agenda-sync", { detail: {} }));
-      if (r) refrescarAgendaAbierta();
+      const igualados = await igualarDatosAlumnado();
+      if (igualados.aula) window.dispatchEvent(new CustomEvent("aulaia-agenda-sync", { detail: { actualizados: igualados.aula } }));
+      if (r || igualados.agenda) refrescarAgendaAbierta();
       return r;
     } catch (e) { console.error("Sincronización automática:", e); return null; }
     finally { ultimaAuto = Date.now(); }
   })();
   try { return await autoEnCurso; } finally { autoEnCurso = null; }
 }
+// ── Un solo dato por alumno ─────────────────────────────────────────────────
+// Nombre, grupo, NEAE, tipo de NEAE y pautas son los mismos en AulaIA y en la Agenda.
+// Se guarda cómo quedaron la última vez (st.aulaiaBase): el lado que cambió desde
+// entonces es el que vale. Si nunca se habían igualado: el nombre más completo, NEAE
+// si lo marca cualquiera de los dos, el texto que no esté vacío y el grupo de AulaIA.
+const CAMPOS_ALUMNO = ["nombre", "grupo", "neae", "tipo", "notas"];
+const igualCampo = (k, x, y) => k === "grupo" ? normG(x) === normG(y) : k === "nombre" ? norm(x) === norm(y) : String(x ?? "").trim() === String(y ?? "").trim();
+let ultimaCopiaIgualar = 0;
+async function igualarDatosAlumnado() {
+  const out = { aula: 0, agenda: 0 };
+  const st = await leerAgenda();
+  if (!st || !(st.students || []).length) return out;
+  const [ra, rg, rc] = await Promise.all([
+    supabase.from("alumnos").select("id, nombre, apellidos, tiene_nee, perfil_nee, notas, grupo_id, agenda_student_id").not("agenda_student_id", "is", null),
+    supabase.from("grupos").select("id, nombre"),
+    supabase.from("clases").select("id, grupo_id"),
+  ]);
+  if (ra.error || rg.error) return out;
+  const grupos = rg.data || [], clases = rc.data || [];
+  const base = st.aulaiaBase || {}, nuevaBase = {};
+  const cambiosAgenda = {};
+  for (const a of ra.data || []) {
+    const s = st.students.find(x => x.id === a.agenda_student_id);
+    if (!s) continue;
+    const U = { nombre: nombreCompleto(a), grupo: grupos.find(g => g.id === a.grupo_id)?.nombre || "", neae: !!a.tiene_nee, tipo: a.perfil_nee?.tipo_texto || "", notas: a.notas || "" };
+    const A = { nombre: s.name || "", grupo: s.group || "", neae: !!s.neae, tipo: s.neaeType || "", notas: s.notes || "" };
+    const B = base[s.id];
+    const fin = { ...U };
+    const aAula = {};
+    for (const k of CAMPOS_ALUMNO) {
+      if (igualCampo(k, U[k], A[k])) continue;
+      let gana;
+      if (B && k in B) gana = igualCampo(k, A[k], B[k]) ? "aula" : igualCampo(k, U[k], B[k]) ? "agenda" : "aula";
+      else if (k === "nombre") gana = norm(A.nombre).startsWith(norm(U.nombre)) && A.nombre.length > U.nombre.length ? "agenda" : "aula";
+      else if (k === "neae") gana = A.neae ? "agenda" : "aula";
+      else if (k === "grupo") gana = "aula";
+      else gana = String(U[k]).trim() ? "aula" : "agenda";
+      if (gana === "agenda" && k === "grupo" && !grupos.some(g => normG(g.nombre) === normG(A.grupo))) gana = "aula"; // ese grupo no existe en AulaIA
+      if (gana === "aula") { (cambiosAgenda[s.id] ||= {})[k] = U[k]; fin[k] = U[k]; }
+      else { aAula[k] = A[k]; fin[k] = A[k]; }
+    }
+    if (Object.keys(aAula).length) {
+      const fila = {};
+      if ("nombre" in aAula) Object.assign(fila, partirNombre(aAula.nombre));
+      if ("neae" in aAula) fila.tiene_nee = !!aAula.neae;
+      if ("tipo" in aAula) fila.perfil_nee = { ...(a.perfil_nee || {}), tipo_texto: aAula.tipo };
+      if ("notas" in aAula) fila.notas = String(aAula.notas || "").trim() || null;
+      if ("grupo" in aAula) { const g = grupos.find(x => normG(x.nombre) === normG(aAula.grupo)); fila.grupo_id = g.id; fila.clase_id = clases.find(c => c.grupo_id === g.id)?.id || null; }
+      const { error } = await supabase.from("alumnos").update(fila).eq("id", a.id);
+      if (error) { Object.keys(aAula).forEach(k => { fin[k] = U[k]; }); continue; }
+      out.aula++;
+    }
+    nuevaBase[s.id] = fin;
+  }
+  const hayCambios = Object.keys(cambiosAgenda).length > 0;
+  if (!hayCambios && JSON.stringify(nuevaBase) === JSON.stringify(base)) return out;
+  if (hayCambios && Date.now() - ultimaCopiaIgualar > 3600000) {
+    try { await copiaDeSeguridad("Antes de igualar datos del alumnado"); ultimaCopiaIgualar = Date.now(); } catch { return out; }
+  }
+  await modificarAgenda((s2) => {
+    (s2.students || []).forEach(x => {
+      const c = cambiosAgenda[x.id]; if (!c) return;
+      if ("nombre" in c) x.name = c.nombre;
+      if ("grupo" in c) x.group = c.grupo;
+      if ("neae" in c) x.neae = !!c.neae;
+      if ("tipo" in c) x.neaeType = c.tipo;
+      if ("notas" in c) x.notes = c.notas;
+    });
+    s2.aulaiaBase = nuevaBase;
+  });
+  out.agenda = Object.keys(cambiosAgenda).length;
+  return out;
+}
+
 // Lo que se borró en la Agenda se quita también de AulaIA, pero con cuidado:
 //  · solo alumnado/asignaturas SIN documentos ni seguimiento (lo demás se queda y
 //    aparece en «⚙️ Mi Agenda» para que decida la docente);
@@ -540,6 +616,8 @@ export const pedirSincronizacion = (soloSiToca = false) => {
   clearTimeout(autoTimer);
   autoTimer = setTimeout(() => { sincronizarAuto(); }, soloSiToca ? 0 : 400);
 };
+// La Agenda (dentro de AulaIA) avisa al guardar o borrar alumnado → se iguala al momento
+if (typeof window !== "undefined") window.__aulaiaSincronizar = () => pedirSincronizacion();
 // Borrar en AulaIA → se borra también en la Agenda (con copia de seguridad antes)
 const refrescarAgendaAbierta = () => { try { document.querySelector(".agenda-embed-frame")?.contentWindow?.__agendaRefrescar?.(); } catch {} };
 async function borrarEnAgenda(classIds, studentIds) {
