@@ -2,9 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import Campo from "./Campo";
+import { supabase } from "../lib/supabase";
+import { leerAgenda, horasDelDia, ASIGNATURAS_AGENDA } from "../lib/agenda";
 import {
   etapaDe, TIPOS_HORA, DIAS, horaTramo, etiquetasTramos, listarTramos, crearTramosEjemplo, guardarTramo, borrarTramo,
-  listarProfesores, listarHorario, guardarCelda, plantillaExcel, leerExcel, leerHorarioConIA, guardarImportacion,
+  listarProfesores, listarHorario, guardarCelda, guardarCeldas, plantillaExcel, leerExcel, leerHorarioConIA, guardarImportacion,
 } from "../lib/sustituciones";
 
 const METODOS = [
@@ -62,7 +64,7 @@ export default function SustHorarios({ etapa }) {
           <div className="chips-grid crm-tabs" role="tablist" aria-label="Forma de carga">
             {METODOS.map(m => <button key={m.id} role="tab" aria-selected={metodo === m.id} className={`chip chip-small ${metodo === m.id ? "chip-active" : ""}`} onClick={() => setMetodo(m.id)}><span className="chip-label">{m.label}</span></button>)}
           </div>
-          {metodo === "manual" && <Manual etapa={etapa} tramos={tramos} etiquetas={etiquetas} profes={profes} horario={horario} onCambio={cargar} onError={setError} />}
+          {metodo === "manual" && <Manual etapa={etapa} tramos={tramos} etiquetas={etiquetas} profes={profes} horario={horario} onCambio={cargar} onError={setError} onEditarTramos={() => setEditTramos(true)} onHecho={hecho} />}
           {metodo === "excel" && <Importar etapa={etapa} tramos={tramos} etiquetas={etiquetas} profes={profes} modo="excel" onHecho={hecho} onError={setError} />}
           {metodo === "ia" && <Importar etapa={etapa} tramos={tramos} etiquetas={etiquetas} profes={profes} modo="ia" onHecho={hecho} onError={setError} />}
         </div>
@@ -126,10 +128,66 @@ function EditarTramos({ etapa, tramos, onClose }) {
 }
 
 // ── Rellenar a mano ─────────────────────────────────────────────────────────
-function Manual({ etapa, tramos, etiquetas, profes, horario, onCambio, onError }) {
+// Minutos desde medianoche de «9:05» / «09:05»
+const minutos = (t) => { const m = String(t || "").match(/(\d{1,2})[:.h](\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+const DIAS_AGENDA = ["LUN", "MAR", "MIE", "JUE", "VIE"];
+
+// Lee el horario semanal de la Agenda de quien está usando AulaIA y lo encaja en los tramos
+async function horarioDesdeAgenda(tramos) {
+  const st = await leerAgenda();
+  if (!st) throw new Error("No se ha podido leer tu Agenda.");
+  // Un lunes cualquiera del curso: se usa el horario fijo de cada día (sin cambios de una semana concreta)
+  const base = new Date(`${st.startDate || "2026-09-07"}T00:00:00`);
+  const lunes = new Date(base); lunes.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+  const celdas = [], sinTramo = [];
+  DIAS_AGENDA.forEach((_, i) => {
+    const fecha = new Date(lunes); fecha.setDate(lunes.getDate() + i);
+    horasDelDia({ ...st, weeklyLessons: {} }, fecha).forEach(h => {
+      if (!h.subjectId) return;
+      const [a, b] = h.time.split("-").map(x => minutos(x));
+      let mejor = null, solape = 0;
+      tramos.filter(t => !t.recreo).forEach(t => {
+        const s = Math.min(b, minutos(t.fin)) - Math.max(a, minutos(t.inicio));
+        if (s > solape) { solape = s; mejor = t; }
+      });
+      const asig = ASIGNATURAS_AGENDA[h.subjectId] || h.subjectId;
+      if (!mejor || solape < (b - a) / 2) { sinTramo.push(`${["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"][i]} ${h.time} · ${asig}`); return; }
+      const tipo = h.subjectId === "REFUERZO" ? "refuerzo" : h.subjectId === "RECREO" ? "patio" : "clase";
+      celdas.push({ tramo_id: mejor.id, dia: i + 1, tipo, grupo: h.group || "", materia: tipo === "clase" || tipo === "refuerzo" ? asig : "", aula: "" });
+    });
+  });
+  // Horas de la Agenda (para poder usarlas como tramos si no coinciden)
+  const slots = (st.slots && st.slots.length ? st.slots : []).map(s => ({ inicio: s.time.split("-")[0].trim(), fin: s.time.split("-").pop().trim(), recreo: !!s.isBreak }));
+  return { celdas, sinTramo, slots };
+}
+
+function Manual({ etapa, tramos, etiquetas, profes, horario, onCambio, onError, onEditarTramos, onHecho }) {
   const [pid, setPid] = useState(profes[0]?.id || "");
   const [celda, setCelda] = useState(null);
+  const [desdeAgenda, setDesdeAgenda] = useState(null); // vista previa de la carga
+  const [cargando, setCargando] = useState(false);
   useEffect(() => { if (!profes.some(p => p.id === pid)) setPid(profes[0]?.id || ""); }, [profes]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Por defecto, la ficha de quien está usando AulaIA (si está en la lista)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const email = (data?.user?.email || "").toLowerCase();
+      const yo = profes.find(p => (p.email || "").toLowerCase() === email);
+      if (yo) setPid(yo.id);
+    }).catch(() => {});
+  }, [profes.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const prepararAgenda = async () => {
+    setCargando(true);
+    try { setDesdeAgenda(await horarioDesdeAgenda(tramos)); } catch (e) { onError(e.message); }
+    finally { setCargando(false); }
+  };
+  const confirmarAgenda = async () => {
+    try {
+      const unicas = {}; desdeAgenda.celdas.forEach(c => { const k = `${c.tramo_id}-${c.dia}`; if (!unicas[k]) unicas[k] = c; });
+      await guardarCeldas(Object.values(unicas).map(c => ({ ...c, profesor_id: pid, etapa })));
+      setDesdeAgenda(null);
+      onHecho(`Horario cargado desde tu Agenda: ${desdeAgenda.celdas.length} horas. Revísalo y completa guardias o recreos si hace falta.`);
+    } catch (e) { onError(e.message); }
+  };
   if (!profes.length) return <p className="sust-privacidad" style={{ marginTop: 12 }}>Primero añade al profesorado en la pestaña «Profesorado», o importa los horarios: se dan de alta solos.</p>;
   const mio = horario.filter(h => h.profesor_id === pid);
   const de = (tramoId, dia) => mio.find(h => h.tramo_id === tramoId && h.dia === dia);
@@ -147,7 +205,11 @@ function Manual({ etapa, tramos, etiquetas, profes, horario, onCambio, onError }
         </Campo>
         <div className="sust-leyenda">{Object.entries(TIPOS_HORA).map(([k, t]) => <span key={k} className={`sust-t-${k}`}>{t.emoji} {t.label}</span>)}</div>
       </div>
-      <p className="field-hint">Pulsa una casilla para decir qué hace en esa hora.</p>
+      <div className="sust-acciones" style={{ marginBottom: 6 }}>
+        <button className="doc-btn" onClick={prepararAgenda} disabled={cargando}>{cargando ? "Leyendo tu Agenda…" : "📅 Cargar desde mi horario de la Agenda"}</button>
+        <button className="doc-btn" onClick={onEditarTramos}>🕘 Cambiar las horas</button>
+      </div>
+      <p className="field-hint">Pulsa una casilla para decir qué hace en esa hora. Las horas (tramos) son las mismas para todo el profesorado de la etapa: se cambian con «🕘 Cambiar las horas».</p>
       <div className="sust-grid-wrap">
         <div className="sust-grid">
           <div />
@@ -166,6 +228,26 @@ function Manual({ etapa, tramos, etiquetas, profes, horario, onCambio, onError }
           ])}
         </div>
       </div>
+      {desdeAgenda && (
+        <Modal titulo="📅 Cargar desde tu Agenda" onClose={() => setDesdeAgenda(null)}>
+          <div className="crm-form">
+            <p style={{ marginTop: 0 }}>Se cargarán <strong>{desdeAgenda.celdas.length} horas</strong> de tu Horario semanal en el horario de <strong>{profes.find(p => p.id === pid)?.nombre}</strong>. Las casillas que ya tengan algo en esas horas se sustituyen; las demás no se tocan.</p>
+            {desdeAgenda.sinTramo.length > 0 && (
+              <div className="crm-aviso" style={{ background: "#fffbeb", borderColor: "#fcd34d", color: "#92400e" }}>
+                ⚠️ {desdeAgenda.sinTramo.length} {desdeAgenda.sinTramo.length === 1 ? "hora no coincide" : "horas no coinciden"} con las horas de {etapaDe(etapa).nombre} y no se {desdeAgenda.sinTramo.length === 1 ? "cargará" : "cargarán"}:
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{desdeAgenda.sinTramo.slice(0, 8).map(x => <li key={x}>{x}</li>)}</ul>
+                Si las horas de tu Agenda son las buenas, cambia las de la etapa con «🕘 Cambiar las horas» y vuelve a cargar.
+              </div>
+            )}
+            {desdeAgenda.celdas.length === 0 && <p className="crm-muted">No hay clases en tu Horario semanal de la Agenda. Rellénalo allí primero (Mi Agenda → Horario semanal).</p>}
+            <div className="crm-modal-actions">
+              <button className="btn-back-sm" onClick={() => setDesdeAgenda(null)}>Cancelar</button>
+              <span style={{ flex: 1 }} />
+              <button className="library-new-btn" disabled={!desdeAgenda.celdas.length} onClick={confirmarAgenda}>Cargar {desdeAgenda.celdas.length} horas</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {celda && (
         <Modal titulo={`${DIAS[celda.dia - 1]} · ${celda.hora}`} onClose={() => setCelda(null)}>
           <div className="crm-form">
