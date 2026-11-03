@@ -90,13 +90,34 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     return [0, 1, 2].map(w => [0, 1, 2, 3, 4].map(i => { const d = new Date(l); d.setDate(l.getDate() + w * 7 + i); return isoDia(d); }));
   })();
   const mesCal = (() => { const t = new Date(`${semanas[1][2]}T00:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
+  // Días elegidos (pueden ser seguidos o sueltos). «desde» y «hasta» son el primero y el último.
+  const [diasSel, setDiasSel] = useState(() => [desde]);
+  useEffect(() => {
+    const l = [...diasSel].sort();
+    if (!l.length) return;
+    setDesde(l[0]); setHasta(l.length > 1 ? l[l.length - 1] : "");
+  }, [diasSel]);
   const tocarDia = (d) => {
-    if (varios && desde && !hasta && d > desde) { setHasta(d); return; }
-    setDesde(d); setHasta("");
+    if (!varios) { setDiasSel([d]); return; }
+    setDiasSel(l => l.includes(d) ? (l.length > 1 ? l.filter(x => x !== d) : l) : [...l, d]);
   };
+  const lectivosEntre = (a, b) => { const out = []; const d = new Date(`${a}T00:00:00`), fin = new Date(`${b}T00:00:00`); for (let n = 0; d <= fin && n < 62; n++) { if (d.getDay() % 6 !== 0) out.push(isoDia(new Date(d))); d.setDate(d.getDate() + 1); } return out; };
+  const diasOrden = [...diasSel].sort();
+  const seguidos = diasOrden.length > 1 && diasOrden.length === lectivosEntre(diasOrden[0], diasOrden[diasOrden.length - 1]).length;
+  const textoDias = (() => {
+    const l = diasOrden; if (!l.length) return "";
+    const fmt = (d, mes = true) => new Date(`${d}T00:00:00`).toLocaleDateString("es-ES", mes ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "long", day: "numeric" }).replace(",", "");
+    if (l.length === 1) return fmt(l[0]);
+    const mismoMes = l.every(d => d.slice(0, 7) === l[0].slice(0, 7));
+    if (seguidos) return `del ${fmt(l[0], !mismoMes)} al ${fmt(l[l.length - 1])}`;
+    const partes = l.map((d, i) => fmt(d, !mismoMes || i === l.length - 1));
+    return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
+  })();
+  // Para frases: «el jueves 5 de noviembre», «del lunes 9 al miércoles 11…», «los días lunes 9, miércoles 11 y…»
+  const fraseDias = diasOrden.length === 1 ? `el ${textoDias}` : seguidos ? textoDias : `los días ${textoDias}`;
   // Nombre del archivo: por defecto, la fecha de la ausencia (se puede cambiar)
   const fechaCorta = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }).replace(/ de /g, " ");
-  const fechasNombre = hasta && hasta !== desde ? `${new Date(`${desde}T00:00:00`).getDate()} al ${fechaCorta(hasta)}` : (desde ? fechaCorta(desde) : "");
+  const fechasNombre = diasOrden.length > 1 ? (seguidos ? `${new Date(`${diasOrden[0]}T00:00:00`).getDate()} al ${fechaCorta(diasOrden[diasOrden.length - 1])}` : `${diasOrden.slice(0, -1).map(d => Number(d.slice(8))).join(" ")} y ${fechaCorta(diasOrden[diasOrden.length - 1])}`) : (desde ? fechaCorta(desde) : "");
   const nombrePorDefecto = `Permiso ausencia ${fechasNombre}`.trim();
   const [nombreArchivo, setNombreArchivo] = useState("");
   const nombreFinal = (nombreArchivo.trim() || nombrePorDefecto);
@@ -109,13 +130,8 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     const st = await leerAgenda().catch(() => null);
     setVistaCarpeta(st ? carpetaSustitucion(st, diasAusencia(), conHorario && !diaCompleto ? selHoras : null) : "No se ha podido leer tu Agenda.");
   };
-  useEffect(() => { setVistaCarpeta(null); }, [desde, hasta, selHoras]);
-  const diasAusencia = () => {
-    const out = []; if (!desde) return out;
-    const d = new Date(`${desde}T00:00:00`), fin = new Date(`${hasta || desde}T00:00:00`);
-    for (let n = 0; d <= fin && n < 31; n++) { if (d.getDay() % 6 !== 0) out.push(isoDia(new Date(d))); d.setDate(d.getDate() + 1); }
-    return out;
-  };
+  useEffect(() => { setVistaCarpeta(null); }, [diasSel, selHoras]);
+  const diasAusencia = () => diasOrden.filter(d => new Date(`${d}T00:00:00`).getDay() % 6 !== 0);
   const descargarCarpeta = async () => {
     const st = await leerAgenda().catch(() => null);
     if (!st) throw new Error("No se ha podido leer tu Agenda para preparar la carpeta de sustitución.");
@@ -145,7 +161,7 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
   const datosDocx = () => {
     const hoy = new Date();
     return {
-      NOMBRE: nombreCompleto.trim(), DIAS: fechasAusencia(desde, hasta).replace(/^el /, ""),
+      NOMBRE: nombreCompleto.trim(), DIAS: textoDias,
       HORA_INICIO: hIni, HORA_FIN: hFin, DIA: String(hoy.getDate()),
       MES: hoy.toLocaleDateString("es-ES", { month: "long" }), ANIO: String(hoy.getFullYear()),
       FECHA: hoy.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }),
@@ -202,7 +218,7 @@ DATOS:
 - Docente: ${perfil?.nombre || "[Nombre y apellidos]"}
 - Centro: ${centro || perfil?.centro || "[Centro]"}
 - Fecha del documento: ${new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
-- Días de ausencia: ${fechasAusencia(desde, hasta)}
+- Días de ausencia: ${fraseDias}
 - Horario: ${horario}
 ${plantilla?.trim() ? "" : `- Grupos y materias que imparte: ${misGrupos || "[Grupos afectados]"}\n`}- Motivo: escribe exactamente ${MARCA_MOTIVO} donde vaya el motivo (no lo cambies ni lo expliques).
 ${observaciones.trim() ? `- Observaciones del docente: ${observaciones.trim()}\n` : ""}
@@ -247,8 +263,8 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
       let carpeta = "";
       if (conCarpeta) carpeta = await descargarCarpeta();
       const para = [...dest.map(d => d.email), ...correosOtros];
-      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivoCorreo ? `\nMotivo: ${motivoCorreo}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia${conCarpeta ? " y la carpeta de sustitución con las tareas" : ""}.\n\nUn saludo,\n${(modoDocx && nombreCompleto.trim()) || perfil?.nombre || ""}`;
-      const url = urlGmail({ para, asunto: `Comunicación de ausencia · ${perfil?.nombre || ""} · ${fechasAusencia(desde, hasta)}`, cuerpo, cuenta: correo });
+      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fraseDias} (${horario.toLowerCase()}).${motivoCorreo ? `\nMotivo: ${motivoCorreo}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia${conCarpeta ? " y la carpeta de sustitución con las tareas" : ""}.\n\nUn saludo,\n${(modoDocx && nombreCompleto.trim()) || perfil?.nombre || ""}`;
+      const url = urlGmail({ para, asunto: `Comunicación de ausencia · ${perfil?.nombre || ""} · ${fraseDias}`, cuerpo, cuenta: correo });
       setGmailUrl(url);
       if (ventana) ventana.location.href = url;
       setOk(`${dest.length ? `Aviso enviado en AulaIA a ${dest.map(d => d.nombre).join(", ")}. ` : ""}Se ha descargado «${archivo}»${carpeta ? ` y «${carpeta}»` : ""} y se ha abierto Gmail con un correo corto: adjunta ${carpeta ? "esos dos Word" : "ese Word"} (están en Descargas) con el clip 📎 y pulsa Enviar.`);
@@ -288,23 +304,23 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
             <button type="button" className="aus-cal-flecha" onClick={() => setSemBase(n => Math.max(0, n - 1))} disabled={semBase === 0} aria-label="Semanas anteriores">‹</button>
             <strong>{mesCal}</strong>
             <button type="button" className="aus-cal-flecha" onClick={() => setSemBase(n => n + 1)} aria-label="Semanas siguientes">›</button>
-            <label className="aus-cal-varios"><input type="checkbox" checked={varios} onChange={e => { setVarios(e.target.checked); if (!e.target.checked) setHasta(""); }} /> Varios días</label>
+            <label className="aus-cal-varios"><input type="checkbox" checked={varios} onChange={e => { setVarios(e.target.checked); if (!e.target.checked) setDiasSel(l => [[...l].sort()[0]]); }} /> Varios días</label>
           </div>
           <div className="aus-cal-grid">
             {["L", "M", "X", "J", "V"].map(x => <span key={x} className="aus-cal-dsem">{x}</span>)}
             {semanas.flat().map(d => {
               const pasado = d < hoyIso;
-              const ini = d === desde, fin = d === hasta, dentro = hasta && d > desde && d < hasta;
+              const on = diasSel.includes(d);
               return (
-                <button key={d} type="button" disabled={pasado} onClick={() => tocarDia(d)} aria-pressed={ini || fin || !!dentro}
-                  className={`aus-cal-dia ${ini || fin ? "aus-cal-on" : dentro ? "aus-cal-rango" : ""} ${d === hoyIso ? "aus-cal-hoy" : ""}`}>
+                <button key={d} type="button" disabled={pasado} onClick={() => tocarDia(d)} aria-pressed={on}
+                  className={`aus-cal-dia ${on ? "aus-cal-on" : ""} ${d === hoyIso ? "aus-cal-hoy" : ""}`}>
                   {Number(d.slice(8))}
                 </button>
               );
             })}
           </div>
           <p className="aus-cal-texto">
-            {varios && desde && !hasta ? "Ahora toca el último día." : `${hasta ? "Del" : ""} ${new Date(`${desde}T00:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}${hasta ? ` al ${new Date(`${hasta}T00:00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}` : ""}`}
+            {varios && diasSel.length === 1 ? "Toca los demás días en los que vas a faltar (seguidos o sueltos)." : `${textoDias}${diasSel.length > 1 ? ` · ${diasSel.length} días` : ""}`}
           </p>
         </div>
         <div className="aus-elegir-horas">
