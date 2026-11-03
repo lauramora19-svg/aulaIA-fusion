@@ -185,7 +185,7 @@ class AlumnoEngine {
       });
     }
 
-    window.store.saveState();
+    Promise.resolve(window.store.saveState()).then(() => { try { window.parent?.__aulaiaSincronizar?.(); } catch (e) {} });
     this.renderStudentsList();
     window.app.closeModal('modal-student');
     window.app.showToast('Ficha de alumnado guardada con éxito.', 'success');
@@ -203,7 +203,7 @@ class AlumnoEngine {
       record.seats.forEach(seat => { if (seat.studentId === studentId) seat.studentId = null; });
     });
 
-    window.store.saveState();
+    Promise.resolve(window.store.saveState()).then(() => { try { window.parent?.__aulaiaSincronizar?.(); } catch (e) {} });
     this.renderStudentsList();
     window.app.showToast('Alumno/a eliminado.', 'info');
   }

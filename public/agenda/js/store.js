@@ -233,7 +233,7 @@ class AppStore {
   rememberBase(st) {
     this._baseStudents = {};
     ((st && st.students) || []).forEach(s => {
-      this._baseStudents[s.id] = { name: s.name, group: s.group, neae: s.neae, neaeType: s.neaeType };
+      this._baseStudents[s.id] = { name: s.name, group: s.group, neae: s.neae, neaeType: s.neaeType, notes: s.notes };
     });
   }
 
@@ -262,11 +262,13 @@ class AppStore {
         // Cambios hechos desde AulaIA en nombre, grupo o NEAE: solo se aplican
         // si aquí no se ha tocado ese dato desde que se cargó.
         const base = (this._baseStudents || {})[rs.id] || {};
-        ['name', 'group', 'neae', 'neaeType'].forEach(k => {
+        ['name', 'group', 'neae', 'neaeType', 'notes'].forEach(k => {
           if (rs[k] !== undefined && rs[k] !== base[k] && local[k] === base[k]) local[k] = rs[k];
         });
       }
     });
+    // Cómo quedaron igualados los datos del alumnado con AulaIA (lo escribe AulaIA)
+    if (r.aulaiaBase) st.aulaiaBase = r.aulaiaBase;
     st.classes = st.classes || [];
     (r.classes || []).forEach(rc => {
       if (!st.classes.some(c => c.id === rc.id) && String(rc.id).startsWith('CLASS-AULAIA-')) st.classes.push(rc);
