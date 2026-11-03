@@ -199,7 +199,10 @@ Categoría: (una de: Tutoría & Reuniones, Seguimiento Académico, Reconocimient
     }
 
     const days = this.buildDateRange(range.start, range.end);
-    const neaeStudents = (window.store.state.students || []).filter(s => s.neae);
+    // Solo el alumnado NEAE de los grupos que tienen clase en los días elegidos
+    const gruposDelDia = this.groupsForDays(days);
+    const neaeStudents = (window.store.state.students || [])
+      .filter(s => s.neae && gruposDelDia.has(this.normGroup(s.group)));
 
     container.innerHTML = `
       <div class="substitution-sheet">
@@ -253,7 +256,7 @@ Categoría: (una de: Tutoría & Reuniones, Seguimiento Académico, Reconocimient
             </h3>
             <ul style="padding-left: 1.25rem; font-size: 0.88rem; color: #881337; display: flex; flex-direction: column; gap: 0.4rem;">
               ${neaeStudents.map(s => `
-                <li><strong>${s.name}${s.neaeType ? ` (${s.neaeType})` : ''}:</strong> ${s.notes || 'Sin observaciones.'}</li>
+                <li><strong>${this.initials(s.name)}${s.group ? ` · ${s.group}` : ''}${s.neaeType ? ` (${s.neaeType})` : ''}:</strong> ${s.notes || 'Sin observaciones.'}</li>
               `).join('')}
             </ul>
           </div>
@@ -336,6 +339,36 @@ Categoría: (una de: Tutoría & Reuniones, Seguimiento Académico, Reconocimient
         `}
       </div>
     `;
+  }
+
+  // Grupo sin espacios, puntos ni símbolos de ordinal: «1º A» = «1ºA» = «1 a»
+  normGroup(g) {
+    return String(g || '').toLowerCase().replace(/[\s.ºª°_-]/g, '');
+  }
+
+  // Grupos con alguna sesión en los días elegidos
+  groupsForDays(days) {
+    const grupos = new Set();
+    days.forEach(dateStr => {
+      const dayId = window.dateEngine.getDayIdForDate(dateStr);
+      if (!dayId) return;
+      const weekIndex = window.dateEngine.getWeekIndexForDate(dateStr);
+      window.store.state.slots.forEach(slot => {
+        if (slot.isBreak) return;
+        const eff = window.store.getEffectiveSlot(dayId, slot.id, weekIndex);
+        if (eff.subjectId && eff.group) grupos.add(this.normGroup(eff.group));
+      });
+    });
+    grupos.delete('');
+    return grupos;
+  }
+
+  // «María López García» → «M. L. G.» (en documentos que salen del aula no van nombres)
+  initials(name) {
+    const enlaces = ['de', 'del', 'la', 'las', 'los', 'el', 'y', 'da', 'do', 'dos'];
+    const partes = String(name || '').trim().split(/\s+/).filter(p => p && !enlaces.includes(p.toLowerCase()));
+    if (!partes.length) return 'Alumno/a';
+    return partes.map(p => p.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '').charAt(0).toUpperCase()).filter(Boolean).map(c => c + '.').join(' ') || 'Alumno/a';
   }
 
   buildDateRange(startStr, endStr) {
