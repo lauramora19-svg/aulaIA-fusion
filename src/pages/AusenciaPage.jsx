@@ -8,8 +8,9 @@ import { isoDia, redactarConEspecialista, urlGmail } from "../lib/asistencia";
 import { correoInstitucional, guardarCorreoInstitucional } from "../lib/correo";
 import { textoDeDocx } from "../lib/docx";
 import { exportarWordContenido } from "../lib/word";
-import { leerAgenda, horasDelDia, ASIGNATURAS_AGENDA } from "../lib/agenda";
+import { leerAgenda, horasDelDia, carpetaSustitucion, ASIGNATURAS_AGENDA } from "../lib/agenda";
 import "../ausencia.css";
+import FirmaPad, { leerFirma } from "../components/FirmaPad";
 import { esPlantillaDocx, prepararPlantillaDocx, opcionesPlantilla, rellenarPlantilla, descargarBlob } from "../lib/plantillaDocx";
 import {
   destinatariosCentro, plantillaAusencia, guardarPlantillaAusencia, enviarAvisos, avisosEnviados, borrarAvisos,
@@ -93,12 +94,40 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     if (varios && desde && !hasta && d > desde) { setHasta(d); return; }
     setDesde(d); setHasta("");
   };
+  // Nombre del archivo: por defecto, la fecha de la ausencia (se puede cambiar)
+  const fechaCorta = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }).replace(/ de /g, " ");
+  const fechasNombre = hasta && hasta !== desde ? `${new Date(`${desde}T00:00:00`).getDate()} al ${fechaCorta(hasta)}` : (desde ? fechaCorta(desde) : "");
+  const nombrePorDefecto = `Permiso ausencia ${fechasNombre}`.trim();
+  const [nombreArchivo, setNombreArchivo] = useState("");
+  const nombreFinal = (nombreArchivo.trim() || nombrePorDefecto);
+  const [conCarpeta, setConCarpeta] = useState(false);
+  const [firma, setFirma] = useState(leerFirma);
+  const [firmar, setFirmar] = useState(() => !!leerFirma());
+  const [vistaCarpeta, setVistaCarpeta] = useState(null);
+  const verCarpeta = async () => {
+    if (vistaCarpeta) { setVistaCarpeta(null); return; }
+    const st = await leerAgenda().catch(() => null);
+    setVistaCarpeta(st ? carpetaSustitucion(st, diasAusencia(), conHorario && !diaCompleto ? selHoras : null) : "No se ha podido leer tu Agenda.");
+  };
+  useEffect(() => { setVistaCarpeta(null); }, [desde, hasta, selHoras]);
+  const diasAusencia = () => {
+    const out = []; if (!desde) return out;
+    const d = new Date(`${desde}T00:00:00`), fin = new Date(`${hasta || desde}T00:00:00`);
+    for (let n = 0; d <= fin && n < 31; n++) { if (d.getDay() % 6 !== 0) out.push(isoDia(new Date(d))); d.setDate(d.getDate() + 1); }
+    return out;
+  };
+  const descargarCarpeta = async () => {
+    const st = await leerAgenda().catch(() => null);
+    if (!st) throw new Error("No se ha podido leer tu Agenda para preparar la carpeta de sustitución.");
+    const md = carpetaSustitucion(st, diasAusencia(), conHorario && !diaCompleto ? selHoras : null);
+    return exportarWordContenido(md, `Carpeta sustitucion ${fechasNombre}`, { encabezadoId: encabezado });
+  };
   const toggleHora = (id) => setSelHoras(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
   const etiquetaHora = (h) => {
     const asig = h.subjectId ? (ASIGNATURAS_AGENDA[h.subjectId] || h.subjectId) : "Sin clase";
     return `${h.time.replace(/\s*-\s*/, "–")} · ${asig}${h.group ? ` (${h.group})` : ""}`;
   };
-  useEffect(() => { setRelleno(null); }, [desde, hasta, hIni, hFin, opcion, motivo, documentos, nombreCompleto, plantilla]);
+  useEffect(() => { setRelleno(null); }, [desde, hasta, hIni, hFin, opcion, motivo, documentos, nombreCompleto, plantilla, firmar, firma]);
 
   useEffect(() => {
     miPerfil().then(setPerfil).catch(() => {});
@@ -134,10 +163,10 @@ export default function AusenciaPage({ clases = [], esAdmin, esAdminCentro, cent
     const e = comprobarDocx(); if (e) { setError(e); return null; }
     setError(""); setOk("");
     guardarLS("aulaia-ausencia-nombre", nombreCompleto.trim()); if (!conHorario) { guardarLS("aulaia-ausencia-hini", horaIni); guardarLS("aulaia-ausencia-hfin", horaFin); }
-    try { const r = await rellenarPlantilla(plantilla, datosDocx(), { opcion: opcion === "" ? null : +opcion, detalle: motivo }); setRelleno(r); return r; }
+    try { const r = await rellenarPlantilla(plantilla, datosDocx(), { opcion: opcion === "" ? null : +opcion, detalle: motivo, firma: firmar ? firma : null }); setRelleno(r); return r; }
     catch (err) { setError(err.message || "No se ha podido rellenar el documento."); return null; }
   };
-  const tituloDocx = () => `Solicitud de permiso ${nombreCompleto.trim()} ${desde}`;
+  const tituloDocx = () => nombreFinal;
   const correosOtros = otros.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
   const toggle = (id) => setElegidos(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
 
@@ -212,15 +241,17 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
       } else {
         const documento = conMotivo(doc, motivo);
         await enviarAvisos({ destinatarios: dest, deNombre: perfil?.nombre || correo, desde, hasta, horario, documento: doc });
-        const titulo = `Comunicacion de ausencia ${perfil?.nombre || ""} ${desde}`;
+        const titulo = nombreFinal;
         archivo = await exportarWordContenido(documento, titulo, { encabezadoId: encabezado });
       }
+      let carpeta = "";
+      if (conCarpeta) carpeta = await descargarCarpeta();
       const para = [...dest.map(d => d.email), ...correosOtros];
-      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivoCorreo ? `\nMotivo: ${motivoCorreo}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia.\n\nUn saludo,\n${(modoDocx && nombreCompleto.trim()) || perfil?.nombre || ""}`;
+      const cuerpo = `Buenos días:\n\nOs comunico mi ausencia ${fechasAusencia(desde, hasta)} (${horario.toLowerCase()}).${motivoCorreo ? `\nMotivo: ${motivoCorreo}` : ""}${observaciones.trim() ? `\n${observaciones.trim()}` : ""}\n\nOs adjunto el documento de comunicación de ausencia${conCarpeta ? " y la carpeta de sustitución con las tareas" : ""}.\n\nUn saludo,\n${(modoDocx && nombreCompleto.trim()) || perfil?.nombre || ""}`;
       const url = urlGmail({ para, asunto: `Comunicación de ausencia · ${perfil?.nombre || ""} · ${fechasAusencia(desde, hasta)}`, cuerpo, cuenta: correo });
       setGmailUrl(url);
       if (ventana) ventana.location.href = url;
-      setOk(`${dest.length ? `Aviso enviado en AulaIA a ${dest.map(d => d.nombre).join(", ")}. ` : ""}Se ha descargado «${archivo}» y se ha abierto Gmail con un correo corto: arrastra ese Word (está en Descargas) al correo y pulsa Enviar.`);
+      setOk(`${dest.length ? `Aviso enviado en AulaIA a ${dest.map(d => d.nombre).join(", ")}. ` : ""}Se ha descargado «${archivo}»${carpeta ? ` y «${carpeta}»` : ""} y se ha abierto Gmail con un correo corto: adjunta ${carpeta ? "esos dos Word" : "ese Word"} (están en Descargas) con el clip 📎 y pulsa Enviar.`);
       avisosEnviados().then(setEnviados);
     } catch (e) { ventana?.close(); setError(e.message || "No se ha podido enviar."); }
     finally { setEnviando(false); }
@@ -280,17 +311,24 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
         {horasDia === null ? null : conHorario ? (
           <>
             <p className="field-hint" style={{ margin: "6px 0 0" }}>Toca las horas en las que vas a faltar{hasta && hasta !== desde ? " (las mismas cada día)" : ""}.</p>
+            {/* Barra del día: cada tramo es una hora; en naranja, las que faltas */}
+            <div className="aus-linea" aria-hidden="true">
+              {horasDia.map(h => {
+                const [i, f] = h.time.split("-").map(x => x.trim());
+                const min = (t) => { const [a, b] = t.split(":").map(Number); return a * 60 + (b || 0); };
+                return <span key={h.slotId} style={{ flexGrow: Math.max(1, min(f) - min(i)) }} className={selHoras.includes(h.slotId) ? "aus-linea-on" : ""} />;
+              })}
+            </div>
+            <div className="aus-linea-horas"><span>{horasDia[0].time.split("-")[0].trim()}</span><span>{horasDia[horasDia.length - 1].time.split("-").pop().trim()}</span></div>
             <div className="aus-horas">
               {horasDia.map(h => {
                 const [i, f] = h.time.split("-").map(x => x.trim());
                 const asig = h.subjectId ? (ASIGNATURAS_AGENDA[h.subjectId] || h.subjectId) : "";
                 const on = selHoras.includes(h.slotId);
                 return (
-                  <button key={h.slotId} type="button" className="aus-fila" aria-pressed={on} onClick={() => toggleHora(h.slotId)}>
-                    <span className="aus-hora"><b>{i}</b><small>{f}</small></span>
-                    <span className={`aus-clase ${asig ? "" : "aus-libre"} ${on ? "aus-marcada" : ""}`}>
-                      {asig ? <><strong>{h.group || asig}</strong>{h.group && <em>{asig}</em>}</> : "Sin clase"}
-                    </span>
+                  <button key={h.slotId} type="button" className={`aus-hora-tile ${on ? "aus-hora-on" : ""} ${asig ? "" : "aus-hora-libre"}`} aria-pressed={on} onClick={() => toggleHora(h.slotId)}>
+                    <span className="aus-hora-t">{i}–{f}</span>
+                    {asig ? <><strong>{h.group || asig}</strong>{h.group ? <em>{asig}</em> : null}</> : <em>Sin clase</em>}
                   </button>
                 );
               })}
@@ -335,6 +373,10 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
             <Campo label="Documentos aportados (opcional)">
               <input className="input-tema" value={documentos} onChange={e => setDocumentos(e.target.value)} placeholder="Ej.: justificante de la consulta" />
             </Campo>
+            <div className="aus-carpeta">
+              <label className="aus-carpeta-check"><input type="checkbox" checked={firmar} onChange={e => setFirmar(e.target.checked)} /> ✍️ Firmar el documento</label>
+              {firmar && <FirmaPad onCambio={setFirma} />}
+            </div>
           </>
         ) : (<>
         <Campo label="Motivo" hint="No se guarda en AulaIA: solo se escribe en el Word y en el correo.">
@@ -344,7 +386,18 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
         <Campo label="Observaciones (opcional)" hint={modoDocx ? "Van en el correo, no en el documento." : undefined}>
           <input className="input-tema" value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Ej.: dejo preparada la carpeta de sustitución con las tareas" />
         </Campo>
-        {onCarpeta && <p className="field-hint" style={{ marginTop: 0 }}>¿Necesitas dejar tareas? <button type="button" className="btn-back-sm" onClick={onCarpeta}>🗂️ Preparar la carpeta de sustitución</button></p>}
+        <div className="aus-carpeta">
+          <label className="aus-carpeta-check"><input type="checkbox" checked={conCarpeta} onChange={e => setConCarpeta(e.target.checked)} /> 🗂️ Adjuntar también la carpeta de sustitución (Word)</label>
+          <p className="field-hint" style={{ margin: "4px 0 0" }}>
+            Se prepara sola con lo que tienes planificado en tu Horario semanal para {conHorario && !diaCompleto ? "las horas marcadas" : "esos días"}: actividad, notas, adaptaciones y avisos del alumnado NEAE (con iniciales).{" "}
+            <button type="button" className="btn-back-sm" onClick={verCarpeta}>{vistaCarpeta ? "Ocultar" : "👁️ Ver cómo queda"}</button>
+            {onCarpeta && <> <button type="button" className="btn-back-sm" onClick={onCarpeta}>✏️ Añadir notas o tareas</button></>}
+          </p>
+          {vistaCarpeta && <div className="resultado-body aus-carpeta-vista">{renderResultado(vistaCarpeta)}</div>}
+        </div>
+        <Campo label="Nombre del archivo" hint="Así lo encontrarás en Descargas. Si lo dejas vacío, se usa la fecha de la ausencia.">
+          <input className="input-tema" value={nombreArchivo} onChange={e => setNombreArchivo(e.target.value)} placeholder={nombrePorDefecto} />
+        </Campo>
 
         <p className="crm-campo-label" style={{ marginTop: 6 }}>¿A quién se lo comunicas?</p>
         {destinos === null ? <p className="crm-muted">Cargando…</p> : destinos.length === 0
@@ -402,9 +455,10 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
         <section className="card">
           <p className="crm-card-title" style={{ marginTop: 0 }}>Documento relleno (revísalo antes de enviarlo)</p>
           <div className="resultado-body" style={{ whiteSpace: "pre-wrap", fontSize: 14 }}>{relleno.texto}</div>
-          <p className="field-hint">Esto es un resumen del texto: el Word que se descarga es el original del colegio, con su mismo formato.</p>
+          <p className="field-hint">Esto es un resumen del texto: el Word que se descarga es el original del colegio, con su mismo formato{firmar && firma ? " y con tu firma debajo de «Fdo.»" : ""}.</p>
           <div className="crm-modal-actions" style={{ flexWrap: "wrap" }}>
             <span style={{ flex: 1 }} />
+            {conCarpeta && <button className="btn-word" onClick={() => descargarCarpeta().catch(e => setError(e.message))}>🗂️ Solo descargar carpeta</button>}
             <button className="btn-word" onClick={() => descargarBlob(relleno.blob, tituloDocx())}>📄 Solo descargar Word</button>
             <button className="library-new-btn" onClick={enviar} disabled={enviando}>{enviando ? "Enviando…" : "📨 Enviar a dirección"}</button>
           </div>
@@ -424,7 +478,7 @@ NORMAS: escribe SOLO el documento, en Markdown sencillo. No añadas apartados, t
           {!redactando && (
             <div className="crm-modal-actions" style={{ flexWrap: "wrap" }}>
               <span style={{ flex: 1 }} />
-              <button className="btn-word" onClick={() => exportarWordContenido(conMotivo(doc, motivo), `Comunicacion de ausencia ${desde}`, { encabezadoId: encabezado }).catch(() => setError("No se ha podido generar el Word."))}>📄 Solo descargar Word</button>
+              <button className="btn-word" onClick={() => exportarWordContenido(conMotivo(doc, motivo), nombreFinal, { encabezadoId: encabezado }).catch(() => setError("No se ha podido generar el Word."))}>📄 Solo descargar Word</button>
               <button className="library-new-btn" onClick={enviar} disabled={enviando}>{enviando ? "Enviando…" : "📨 Enviar a dirección"}</button>
             </div>
           )}
