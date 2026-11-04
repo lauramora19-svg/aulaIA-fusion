@@ -256,7 +256,7 @@ Categoría: (una de: Tutoría & Reuniones, Seguimiento Académico, Reconocimient
             </h3>
             <ul style="padding-left: 1.25rem; font-size: 0.88rem; color: #881337; display: flex; flex-direction: column; gap: 0.4rem;">
               ${neaeStudents.map(s => `
-                <li><strong>${this.initials(s.name)}${s.group ? ` · ${s.group}` : ''}${s.neaeType ? ` (${s.neaeType})` : ''}:</strong> ${s.notes || 'Sin observaciones.'}</li>
+                <li><strong>${this.initials(s.name)}${s.group ? ` · ${s.group}` : ''}</strong>${s.neaeType ? ` (${s.neaeType})` : ''}</li>
               `).join('')}
             </ul>
           </div>
