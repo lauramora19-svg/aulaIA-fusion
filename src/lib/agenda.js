@@ -153,7 +153,7 @@ export function carpetaSustitucion(st, dias, slotIds = null) {
   out.push(...partes);
   if (neae.length) {
     out.push("## Avisos de alumnado (NEAE)");
-    neae.forEach(a => out.push(`- **${iniciales(a.name)}${a.group ? ` · ${a.group}` : ""}${a.neaeType ? ` (${a.neaeType})` : ""}:** ${(a.notes || "Sin observaciones.").replace(/\n+/g, " ")}`));
+    neae.forEach(a => out.push(`- **${iniciales(a.name)}${a.group ? ` · ${a.group}` : ""}**${a.neaeType ? ` (${a.neaeType})` : ""}`));
   }
   return out.join("\n\n");
 }
