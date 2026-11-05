@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { AuthProvider } from "./lib/AuthContext";
 import App from "./App";
 import "./lib/apiGuard";
+import "./movil.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

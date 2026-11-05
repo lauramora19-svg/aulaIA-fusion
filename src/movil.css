@@ -1,0 +1,19 @@
+/* Ajustes para móvil (iPhone y Android). Solo cambia la colocación en pantallas
+   pequeñas; en ordenador todo se ve igual que antes. */
+
+/* Que nada haga la página más ancha que la pantalla (en iPhone se descuadraba todo) */
+html, body { overflow-x: hidden; }
+.bg-orbs { overflow: hidden; }
+
+@media (max-width: 600px) {
+  .navbar-inner { padding: 0 12px; gap: 8px; }
+  .navbar-right { gap: 6px; }
+  .navbar-link { padding: 7px 8px; }
+  .navbar-link-texto { display: none; }      /* solo el icono 📂 */
+  .navbar-new { padding: 8px 12px; }
+  .navbar-user { padding: 4px; gap: 0; }
+  .navbar-email-short, .navbar-chevron { display: none; } /* solo la inicial */
+}
+@media (max-width: 340px) {
+  .navbar-logo-text { display: none; }
+}
